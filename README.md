@@ -32,6 +32,30 @@ A fantasy football strategy game powered by AI.
     npm run dev
     ```
 
+## 📖 Gameplay Manual
+
+### The Basics
+Spellbound Gridiron is a turn-based tactical sports game played on a 12x18 grid. The objective is to score touchdowns by moving the ball into the opponent's endzone.
+
+### Player Roles & Stats
+
+Each player has unique stats that define their capabilities:
+
+-   **Lineman**: Tough and reliable. High Armor.
+-   **Blitzer**: The muscle. Balanced Speed and Strength.
+-   **Catcher**: Fast and agile (Move 8), but fragile (Armor 7).
+-   **Quarterback**: The playmaker. Good passing skills.
+-   **Wizard**: Special unit capable of casting spells like *Fireball* or *Teleport*.
+
+### Terrain & Weather
+
+The arena changes every match (in the future it will affect strategy):
+
+-   **Elven Fields (Grass)**: Standard play conditions.
+-   **Orc Pits (Mud)**: Slippery; movement is riskier. (not yet implemented)
+-   **Demon Forge (Lava)**: Dangerous footing. (not yet implemented)
+-   **Frozen Wastes (Ice)**: High slide potential. (not yet implemented)
+
 ## Features
 
 ### 🤖 AI Assistant (chatbot)
