@@ -3,6 +3,8 @@
 
 A fantasy football strategy game powered by AI.
 
+![Screenshot](Screenshot_20251218.png)
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
@@ -32,14 +34,15 @@ A fantasy football strategy game powered by AI.
 
 ## Features
 
-### 🤖 DeepThought Panel
-Click the robot icon to open the **DeepThought** terminal. This panel supports a **Hybrid Architecture** for generating content:
+### 🤖 AI Assistant (chatbot)
+Click the robot icon to open the **Ai Assistant** terminal. This assistant provides in-game help, rule clarifications, and tactical advice.
 
-1.  **Cloud APIs (Client Mode)**:
-    - Select **OpenAI**, **Gemini**, or **Claude** from the dropdown.
-    - Click the **Key Icon (🔑)** to securely enter your API key directly in the browser.
-    - These requests are handled entirely by your browser using official SDKs.
+### ⚙️ Game Configuration
+Click the **Gear Icon** to open the Settings Modal. Here you can configure the dual-engine architecture:
 
-2.  **CLI Tools (Backend Mode)**:
-    - Select **Codex (GPT-5)** (or other configured CLI tools).
-    - These requests are sent to the local backend server, which executes the corresponding command-line tool on your machine.
+1.  **Game Engine**: Powers automatic commentary, team names, and flavor text.
+2.  **Assistant Engine**: Powers the interactive chat assistant.
+
+**Supported Providers:**
+-   **Cloud APIs**: OpenAI (ChatGPT), Gemini (Google), Claude (Anthropic). _(Requires API Keys)_
+-   **CLI Tools**: Local execution of `codex`, `claude`, or `gemini` command-line tools via the backend server.

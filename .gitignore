@@ -29,6 +29,7 @@ dist-ssr
 *.sw?
 
 # Temporary files
+temp
 *.tmp
 *.temp
 *.swp
