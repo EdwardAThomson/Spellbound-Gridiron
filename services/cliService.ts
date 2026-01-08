@@ -20,13 +20,13 @@ export interface TaskUpdate {
 }
 
 export const cliService = {
-    async createTask(backend: BackendType, prompt: string, cwd?: string): Promise<TaskResponse> {
+    async createTask(backend: BackendType, prompt: string, cwd?: string, model?: string): Promise<TaskResponse> {
         const response = await fetch(`${GATEWAY_URL}/tasks`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ backend, prompt, cwd }),
+            body: JSON.stringify({ backend, prompt, cwd, model }),
         });
 
         if (!response.ok) {

@@ -72,8 +72,8 @@ export default function App() {
     const [gameModel, setGameModel] = useState<string>(DEFAULT_MODELS['gemini']);
 
     // AI Chat/Assistant State
-    const [chatProvider, setChatProvider] = useState<LLMProvider>('openai');
-    const [chatModel, setChatModel] = useState<string>(DEFAULT_MODELS['openai']);
+    const [chatProvider, setChatProvider] = useState<LLMProvider>('gemini-cli');
+    const [chatModel, setChatModel] = useState<string>(DEFAULT_MODELS['gemini-cli']);
 
     const [showSettings, setShowSettings] = useState(false);
 

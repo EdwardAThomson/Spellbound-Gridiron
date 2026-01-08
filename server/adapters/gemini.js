@@ -6,14 +6,18 @@ class GeminiAdapter extends BaseAdapter {
     }
 
     buildCommand(options) {
-        // gemini -p "<prompt>" -m gemini-2.5-pro
-        const model = options.model || 'gemini-2.5-pro';
-        const args = ['-p', options.prompt, '-m', model];
+        // gemini -p "<prompt>" -m <model> --output-format stream-json
+        let model = options.model;
+        if (!model || model === 'gemini-cli') {
+            model = 'gemini-3-flash-preview';
+        }
+        const args = ['-p', options.prompt, '-m', model, '--output-format', 'stream-json'];
 
         return {
             command: this.config.binPath,
             args,
-            env: {}
+            env: {},
+            responseFormat: 'json-stream'
         };
     }
 }

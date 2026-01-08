@@ -2,6 +2,7 @@ import { generateText, LLMProvider } from '../utils/llmHelper';
 import { GameState } from '../types';
 import { ApiKeysContextType } from '../context/ApiKeysContext';
 import { serializeGameState } from '../utils/contextSerializer';
+import { PROMPT_SNIPPET } from '../constants/ai_persona';
 
 export const generateCommentary = async (
     lastAction: string,
@@ -16,11 +17,12 @@ export const generateCommentary = async (
 
     const context = serializeGameState(gameState);
     const prompt = `
+${PROMPT_SNIPPET}
+
 ${context}
 
-You are a fantasy sports commentator (a Goblin or Excitable Wizard).
 The last action was: "${lastAction}".
-Provide a short, punchy, and funny 1-sentence reaction.
+Provide a short, punchy, and funny 1-sentence reaction in character.
 `;
 
     try {

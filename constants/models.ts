@@ -2,6 +2,8 @@ import { LLMProvider } from '../utils/llmHelper';
 
 export const AVAILABLE_MODELS: Record<LLMProvider, { id: string; name: string }[]> = {
     gemini: [
+        { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash' },
+        { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)' },
         { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
         { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
         { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Legacy)' },
@@ -23,15 +25,17 @@ export const AVAILABLE_MODELS: Record<LLMProvider, { id: string; name: string }[
         { id: 'claude-cli', name: 'Claude CLI (Default)' }
     ],
     'gemini-cli': [
-        { id: 'gemini-cli', name: 'Gemini CLI (Default)' }
+        { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash CLI (Default)' },
+        { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro CLI' },
+        { id: 'gemini-cli', name: 'Gemini 2.5 CLI (Legacy)' }
     ]
 };
 
 export const DEFAULT_MODELS: Record<LLMProvider, string> = {
-    gemini: 'gemini-2.5-flash',
+    gemini: 'gemini-3-flash-preview',
     openai: 'gpt-5-mini',
     claude: 'claude-sonnet-4-5-20250929',
     codex: 'codex-cli',
     'claude-cli': 'claude-cli',
-    'gemini-cli': 'gemini-cli'
+    'gemini-cli': 'gemini-3-flash-preview'
 };

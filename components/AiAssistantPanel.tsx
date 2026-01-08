@@ -4,6 +4,7 @@ import { ApiKeysContext } from '../context/ApiKeysContext';
 import { generateText, LLMProvider } from '../utils/llmHelper';
 import { GameState } from '../types';
 import { serializeGameState } from '../utils/contextSerializer';
+import { PROMPT_SNIPPET } from '../constants/ai_persona';
 
 interface AiAssistantPanelProps {
     gameState: GameState;
@@ -37,7 +38,7 @@ export default function AiAssistantPanel({ gameState, backend, model }: AiAssist
         if (isCli) {
             try {
                 const contextBlock = serializeGameState(gameState);
-                const fullPrompt = `${contextBlock}\n\n[USER COMMAND]\n${prompt}`;
+                const fullPrompt = `${PROMPT_SNIPPET}\n\n${contextBlock}\n\n[USER COMMAND]\n${prompt}`;
 
                 // Map LLMProvider params to BackendType expected by cliService
                 let cliBackend = 'codex';
@@ -46,7 +47,7 @@ export default function AiAssistantPanel({ gameState, backend, model }: AiAssist
                 if (backend === 'codex') cliBackend = 'codex';
 
                 // We cast to any because we know we are passing a CLI backend string valid for the service
-                const { id } = await cliService.createTask(cliBackend as any, fullPrompt);
+                const { id } = await cliService.createTask(cliBackend as any, fullPrompt, undefined, model);
 
                 cliService.streamTask(id, (update) => {
                     if (update.type === 'status') {
@@ -73,7 +74,7 @@ export default function AiAssistantPanel({ gameState, backend, model }: AiAssist
         setStatus('running');
         try {
             const contextBlock = serializeGameState(gameState);
-            const fullPrompt = `${contextBlock}\n\n[USER COMMAND]\n${prompt}`;
+            const fullPrompt = `${PROMPT_SNIPPET}\n\n${contextBlock}\n\n[USER COMMAND]\n${prompt}`;
 
             const response = await generateText(backend, apiKeys, model, fullPrompt);
             setLogs([{ line: response, stream: 'stdout', ts: new Date().toISOString() }]);

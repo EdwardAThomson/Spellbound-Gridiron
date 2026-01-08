@@ -5,7 +5,7 @@ const adapters = require('./adapters');
 // In-memory task store
 const tasks = new Map();
 
-function createTask({ backend, prompt, cwd }) {
+function createTask({ backend, prompt, cwd, model }) {
     const id = randomUUID();
     const adapter = adapters.getAdapter(backend);
 
@@ -17,6 +17,7 @@ function createTask({ backend, prompt, cwd }) {
         id,
         backend,
         prompt,
+        model,
         cwd: cwd || process.cwd(),
         status: 'queued',
         logs: [],
@@ -39,7 +40,8 @@ function runTask(task, adapter) {
     try {
         const invocation = adapter.buildCommand({
             prompt: task.prompt,
-            cwd: task.cwd
+            cwd: task.cwd,
+            model: task.model
         });
 
         console.log(`Spawning: ${invocation.command} ${invocation.args.join(' ')}`);
@@ -47,18 +49,53 @@ function runTask(task, adapter) {
         const child = spawn(invocation.command, invocation.args, {
             cwd: task.cwd,
             env: { ...process.env, ...invocation.env },
-            shell: true // Helpful for path resolution
+            shell: false // Prevent shell escaping issues with complex prompts
         });
 
         task.process = child;
+        let lineBuffer = '';
 
         child.stdout.on('data', (data) => {
-            const line = data.toString();
-            appendLog(task, line, 'stdout');
+            const chunk = data.toString();
+
+            if (invocation.responseFormat === 'json-stream') {
+                lineBuffer += chunk;
+                const lines = lineBuffer.split('\n');
+                lineBuffer = lines.pop(); // Keep the last partial line
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const parsed = JSON.parse(line);
+                        // Only broadcast final messages to the UI to preserve immersion
+                        if (parsed.type === 'message' && parsed.content) {
+                            appendLog(task, parsed.content, 'stdout');
+                        }
+                    } catch (e) {
+                        // In json-stream mode, we suppress non-JSON lines to avoid breaking immersion.
+                        // We only log them to the server console for debugging.
+                        console.log(`[Task ${task.id} Debug] Suppressed non-JSON stdout: ${line}`);
+                    }
+                }
+            } else {
+                appendLog(task, chunk, 'stdout');
+            }
         });
 
         child.stderr.on('data', (data) => {
             const line = data.toString();
+            // Filter out common CLI noise and progress indicators from stderr to preserve immersion
+            const noise = [
+                'Loaded cached credentials',
+                'Thinking...',
+                'Fetching',
+                'Processing',
+                '[' // Progress bars often start with [
+            ];
+
+            if (noise.some(p => line.includes(p))) {
+                return;
+            }
             appendLog(task, line, 'stderr');
         });
 
@@ -101,7 +138,7 @@ function streamTask(id, res) {
     });
 
     // Remove client on disconnect
-    req.on('close', () => {
+    res.on('close', () => {
         task.clients = task.clients.filter(c => c !== res);
     });
 }
