@@ -5,95 +5,84 @@
 
 ---
 
-## Phase 0: Code Modernization & Bug Fixes
+## Phase 0: Code Modernization & Bug Fixes -- DONE
 
 Before adding features, stabilize and restructure the codebase.
 
 ### Architecture
 
-- [ ] **Extract game engine from App.tsx** - Move all game logic (movement,
-      tackling, passing, spells, scoring) out of `App.tsx` into a dedicated
-      game engine module. `App.tsx` is currently ~700 lines mixing UI and
-      game state.
-- [ ] **Introduce a state machine for game flow** - Model game phases
-      explicitly (e.g. `MAIN_MENU`, `TEAM_SELECT`, `PLAYING`, `POST_GAME`,
-      `CAMPAIGN_MAP`) instead of ad-hoc boolean flags like `hasGameStarted`.
-- [ ] **Add client-side routing** - Use React Router (or similar) so screens
-      like main menu, team selection, game board, and campaign map each have
-      their own route.
-- [ ] **Break up the monolith component** - Split `App.tsx` into focused
-      components/hooks: `useGameEngine`, `GameBoard`, `HUD`, `Scoreboard`,
-      `PlayerCard`, `ActionPanel`, etc.
-- [ ] **Data-driven team/roster system** - Replace hardcoded `INITIAL_HOME_TEAM`
-      / `INITIAL_AWAY_TEAM` with a roster data file that defines all available
-      teams, their races, colors, and player compositions.
+- [x] **Extract game engine from App.tsx** - All game logic moved to
+      `hooks/useGameEngine.ts`. App.tsx reduced from ~700 lines to ~70.
+- [x] **Introduce a state machine for game flow** - `GamePhase` enum
+      (`MAIN_MENU`, `TEAM_SELECT`, `PLAYING`, `POST_GAME`) replaces
+      ad-hoc boolean flags.
+- [x] **Phase-based routing** - App.tsx routes between screens based on
+      `GamePhase`. (Lightweight approach; no React Router needed yet.)
+- [x] **Break up the monolith component** - Split into `GameScreen`,
+      `MainMenu`, `TeamSelectScreen`, plus `useGameEngine` hook.
+- [x] **Data-driven team/roster system** - `TeamBlueprint` type and
+      `TEAM_BLUEPRINTS` array in `constants.ts` define all 8 teams.
 
 ### Bug Fixes
 
-- [ ] **Fix direct state mutation in `handleCastSpell`** - Line
-      `player.position = targetPos` mutates state directly instead of going
-      through `updatePlayerState`. This can cause React rendering issues.
-- [ ] **Armor stat is flavor-only** - Currently defined on every player but
-      never referenced in any game mechanic. Either wire it in or remove it
-      (see Phase 2 for plan to use it).
+- [x] **Fix direct state mutation in `handleCastSpell`** - Now creates
+      a new object via spread instead of mutating `player.position`.
+- [x] **Armor stat wired in** - Armor now affects tackle injury checks.
+      High-armor defenders can stun attackers on failed tackles.
 
 ### Quality of Life
 
 - [ ] **Add save/load game state** - Persist to `localStorage` so games
       survive page refreshes.
-- [ ] **Add unit tests** - Cover core game utils (`resolveTackle`,
-      `resolvePass`, `rollDice`, movement validation, touchdown detection).
-- [ ] **Type-safe spell system** - Replace string keys (`'FIREBALL'`,
-      `'TELEPORT'`) with a proper enum or union type.
+- [x] **Add unit tests** - 29 tests covering game utils: position logic,
+      tackles, passes, terrain/weather modifiers, ice slide, lava hazards,
+      effective movement. Run with `npm test`.
+- [x] **Type-safe spell system** - `SpellKey` enum replaces string keys.
+- [x] **Removed stale `StartOverlay` component** - No longer used after
+      main menu was added.
 
 ---
 
-## Phase 1: Main Menu & Quick Play
+## Phase 1: Main Menu & Quick Play -- DONE
 
 ### Main Menu
 
-- [ ] **Create a main menu screen** - Title art, atmospheric background.
-      Buttons for:
+- [x] **Main menu screen** - Title art, atmospheric background. Buttons:
   - Quick Play
-  - Campaign / League (disabled until Phase 5)
+  - Campaign / League (disabled, coming in Phase 5)
   - Settings (AI model configuration)
   - Rule Book
-- [ ] **Team selection screen** - Shown after clicking Quick Play. Pick home
-      and away teams from the roster. Show team preview: race, roster
-      composition, color/theme.
+- [x] **Team selection screen** - Pick home and away teams from the
+      8-team roster. Shows race, description, roster composition, and
+      color-coded cards.
 
 ### Quick Play Flow
 
-- [ ] `Main Menu` -> `Select Home Team` -> `Select Away Team` ->
-      `Loading / AI team name generation` -> `Game Board`
+- [x] `Main Menu` -> `Select Home Team` -> `Select Away Team` ->
+      `Game Board` (with AI team name generation in background)
 - [ ] **Post-game summary screen** - Show final score, MVP player stats,
       key plays. Options: rematch, return to menu.
 
 ---
 
-## Phase 2: Expanded Rosters & Player Stats
+## Phase 2: Expanded Rosters & Player Stats -- PARTIAL
 
 ### More Teams
 
-Add a diverse set of teams, each with a distinct fantasy race and play style.
+All 8 teams implemented with unique roster compositions:
 
-| Team                 | Race          | Play Style            |
-| -------------------- | ------------- | --------------------- |
-| Elven Vanguard       | High Elves    | Agile, passing game   |
-| Orc Bashers          | Dark Orcs     | Brute strength        |
-| Undead Legion        | Undead        | Resilient, slow       |
-| Dwarven Ironwall     | Dwarves       | Defensive, high armor |
-| Skaven Swarm         | Ratfolk       | Fast, fragile         |
-| Demon Hellfire       | Demons        | Magic-heavy           |
-| Human Crusaders      | Humans        | Balanced / versatile  |
-| Lizardfolk Predators | Lizardfolk    | Mixed speed/strength  |
+| Team                 | Race          | Roster                                         |
+| -------------------- | ------------- | ---------------------------------------------- |
+| Elven Vanguard       | High Elves    | 2x Catcher, QB, Blitzer, Wizard                |
+| Orc Bashers          | Dark Orcs     | 2x Lineman, 2x Blitzer, QB                     |
+| Undead Legion        | Undead        | 3x Lineman, Blitzer, Wizard                    |
+| Dwarven Ironwall     | Dwarves       | 3x Lineman, Blitzer, QB                        |
+| Skaven Swarm         | Ratfolk       | 3x Catcher, Blitzer, QB                        |
+| Demon Hellfire       | Demons        | 2x Wizard, Blitzer, Lineman, QB                |
+| Human Crusaders      | Humans        | Lineman, Blitzer, QB, Catcher, Wizard           |
+| Lizardfolk Predators | Lizardfolk    | 2x Lineman, 2x Blitzer, Catcher                |
 
-Each team should have a **unique roster composition** - not every team needs
-the same 5 roles. For example:
-- Orcs might run 2 Linemen, 2 Blitzers, 1 Quarterback (no Wizard)
-- Demons might run 2 Wizards, 1 Blitzer, 1 Catcher, 1 Quarterback
-
-### New Player Roles
+### New Player Roles (Future)
 
 - [ ] **Beastmaster** - Summons a temporary companion unit (e.g. wolf,
       skeleton) that occupies a tile and can tackle.
@@ -105,6 +94,7 @@ the same 5 roles. For example:
 ### Revised Stats
 
 Current stats: `move`, `strength`, `skill`, `armor`.
+Armor is now functional (affects tackle injury checks).
 
 Proposed additions:
 
@@ -117,30 +107,28 @@ Proposed additions:
 
 Stat revision decisions to make:
 - [ ] Should `skill` split into `passing` and `agility`?
-- [ ] Should `armor` become a functional stat (damage reduction / injury
-      resistance)?
 - [ ] Is a `stamina` / fatigue system worth the complexity? (More relevant
       for campaign mode where player health carries over between matches.)
 - [ ] Add player **leveling / XP** for campaign mode?
 
 ---
 
-## Phase 3: Terrain & Exotic Maps
+## Phase 3: Terrain & Exotic Maps -- PARTIAL
 
-### Implement Existing Terrain Effects
+### Terrain Effects -- DONE
 
-The terrain types already exist in code but have no gameplay effect.
+All 4 terrain types now have gameplay effects:
 
 | Terrain        | Arena Name    | Gameplay Effect                          |
 | -------------- | ------------- | ---------------------------------------- |
 | Grass          | Elven Fields  | Standard. No modifiers.                  |
-| Mud            | Orc Pits      | -1 movement per tile. Tackle rolls +1 for defenders (harder to push in mud). |
-| Lava           | Demon Forge   | Tiles randomly become hazards each turn. Stepping on hazard = injury check. |
-| Ice            | Frozen Wastes | After moving, player slides 1 extra tile in the same direction. Passing accuracy -1. |
+| Mud            | Orc Pits      | 2x movement cost per tile. Tackle +1 for defenders. |
+| Lava           | Demon Forge   | Random hazard tiles each turn. Armor-based injury check. |
+| Ice            | Frozen Wastes | Player slides 1 extra tile after moving. Passing -1. |
 
-### Exotic / Special Maps
+Terrain is randomly assigned at match start.
 
-Beyond terrain modifiers, add maps with unique layouts and game modes.
+### Exotic / Special Maps (Future)
 
 - [ ] **The Gauntlet** - Narrow 8-wide corridor map. No flanking room.
       Favors brute-force teams.
@@ -161,26 +149,26 @@ Each exotic map should define:
 
 ---
 
-## Phase 4: Weather System
+## Phase 4: Weather System -- DONE
 
-Weather currently exists as an enum (`Clear`, `Rain`, `Blizzard`,
-`Meteor Shower`) but has no gameplay impact.
+All weather types now have gameplay effects:
 
 | Weather        | Effects                                                    |
 | -------------- | ---------------------------------------------------------- |
 | Clear          | No modifiers.                                              |
-| Rain           | Passing accuracy -1. Ball pickup requires a skill check.   |
-| Blizzard       | Visibility reduced: can only select players within 4 tiles of ball. Movement -1. |
-| Meteor Shower  | Random tiles become hazard zones each turn. Standing in one = stun check. |
-| Fog            | (New) Cannot see opponent positions beyond 3 tiles.        |
-| Arcane Storm   | (New) All spell costs reduced by 1. Random magical effects each turn. |
+| Rain           | Passing -1. Ball pickup requires a skill check.            |
+| Blizzard       | Movement -1. Passing -2.                                   |
+| Meteor Shower  | Random meteor strikes each turn. Armor-based stun check.   |
 
-- [ ] Weather should be randomly assigned at match start (or chosen in
-      Quick Play settings).
-- [ ] Weather can change mid-match (e.g. every 4 turns, roll for weather
-      change).
+- [x] Weather randomly assigned at match start.
+- [x] Weather changes mid-match (every 4 turns, new random weather).
 - [ ] Visual weather effects on the board (rain particles, snow, fire from
       sky, fog overlay).
+
+Future weather types:
+- [ ] **Fog** - Cannot see opponent positions beyond 3 tiles.
+- [ ] **Arcane Storm** - All spell costs reduced by 1. Random magical
+      effects each turn.
 
 ---
 
@@ -249,8 +237,9 @@ The flagship long-term feature. A single-player campaign with progression.
 
 ## Open Questions
 
-1. Should terrain effects stack with weather effects, or should they be
-   independent systems?
+1. ~~Should terrain effects stack with weather effects?~~ **Resolved**: Yes,
+   they stack. Terrain and weather modifiers are independent and additive
+   (e.g. ice terrain -1 pass + rain weather -1 pass = -2 total).
 2. How many turns should a match last? Currently unlimited until a score
    target. Should there be a turn limit with highest-score-wins?
 3. For campaign mode, should the AI opponent use LLM-based tactical

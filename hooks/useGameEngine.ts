@@ -4,14 +4,26 @@ import {
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData, SpellKey, GamePhase,
     TeamBlueprint
 } from '../types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, isAdjacent, resolveTackle, resolvePass } from '../services/gameUtils';
-import { SPELLS, TEAM_BLUEPRINTS } from '../constants';
+import {
+    createPlayer, getPlayerAtPosition, isPositionValid, isAdjacent,
+    resolveTackle, resolvePass, getMovementCost, resolveIceSlide,
+    resolveBallPickup, generateLavaHazards, resolveLavaHazard,
+    generateMeteorStrikes, resolveMeteorStrike, getEffectiveMovement
+} from '../services/gameUtils';
+import { SPELLS } from '../constants';
 import { generateCommentary, generateTeamName } from '../services/gameAiService';
 import { ApiKeysContext } from '../context/ApiKeysContext';
 import { LLMProvider } from '../utils/llmHelper';
 
 type InteractionMode = 'DEFAULT' | 'TARGETING';
 type TargetAction = 'PASS' | 'SPELL';
+
+const ALL_TERRAINS = [TerrainType.GRASS, TerrainType.MUD, TerrainType.LAVA, TerrainType.ICE];
+const ALL_WEATHERS = [Weather.CLEAR, Weather.RAIN, Weather.BLIZZARD, Weather.METEOR_SHOWER];
+
+function pickRandom<T>(arr: T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
 
 const EMPTY_TEAM: TeamData = {
     name: '',
@@ -79,18 +91,30 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     // --- Game Setup ---
 
     const startGame = useCallback(async (homeBlueprint: TeamBlueprint, awayBlueprint: TeamBlueprint) => {
+        const terrain = pickRandom(ALL_TERRAINS);
+        const weather = pickRandom(ALL_WEATHERS);
+
         const homePlayers = setupTeamFromBlueprint(homeBlueprint, TeamSide.HOME, 1, 1);
         const awayPlayers = setupTeamFromBlueprint(awayBlueprint, TeamSide.AWAY, 16, -1);
+
+        // Apply weather movement modifier to starting move pools
+        const applyMovement = (players: Player[]) =>
+            players.map(p => ({
+                ...p,
+                movesRemaining: getEffectiveMovement(p.stats.move, terrain, weather),
+            }));
 
         setGameState(prev => ({
             ...prev,
             phase: GamePhase.PLAYING,
+            terrain,
+            weather,
             homeTeam: {
                 name: homeBlueprint.name,
                 race: homeBlueprint.race,
                 color: homeBlueprint.color,
                 score: 0,
-                players: homePlayers,
+                players: applyMovement(homePlayers),
                 blueprintId: homeBlueprint.id,
             },
             awayTeam: {
@@ -98,10 +122,13 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
                 race: awayBlueprint.race,
                 color: awayBlueprint.color,
                 score: 0,
-                players: awayPlayers,
+                players: applyMovement(awayPlayers),
                 blueprintId: awayBlueprint.id,
             },
-            gameLog: ['The mystical gates open! The match begins.'],
+            gameLog: [
+                'The mystical gates open! The match begins.',
+                `Terrain: ${terrain}. Weather: ${weather}.`,
+            ],
         }));
 
         // Fetch AI names in background
@@ -198,10 +225,16 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         setTimeout(() => {
             setGameState(prev => {
                 const home = prev.homeTeam.players.map(p => ({
-                    ...p, hasBall: false, position: { x: p.position.x, y: 1 + Math.floor(Math.random() * 3) }
+                    ...p,
+                    hasBall: false,
+                    position: { x: p.position.x, y: 1 + Math.floor(Math.random() * 3) },
+                    movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, prev.weather),
                 }));
                 const away = prev.awayTeam.players.map(p => ({
-                    ...p, hasBall: false, position: { x: p.position.x, y: 16 - Math.floor(Math.random() * 3) }
+                    ...p,
+                    hasBall: false,
+                    position: { x: p.position.x, y: 16 - Math.floor(Math.random() * 3) },
+                    movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, prev.weather),
                 }));
                 return {
                     ...prev,
@@ -215,30 +248,58 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     }, []);
 
     const handleMove = useCallback((player: Player, to: Position) => {
-        const updatedPlayer = {
-            ...player,
-            position: to,
-            movesRemaining: player.movesRemaining - 1,
-        };
+        const terrain = gameState.terrain;
+        const weather = gameState.weather;
+        const moveCost = getMovementCost(terrain);
 
-        let newBallPos = gameState.ballPosition;
-
-        if (gameState.ballPosition && to.x === gameState.ballPosition.x && to.y === gameState.ballPosition.y) {
-            updatedPlayer.hasBall = true;
-            newBallPos = null;
-            addLog(`${player.name} picked up the ball!`);
+        if (player.movesRemaining < moveCost) {
+            addLog(`${player.name} can't move — the ${terrain.toLowerCase()} terrain is too costly!`);
+            return;
         }
 
+        let finalPos = to;
+        const updatedPlayer = {
+            ...player,
+            position: finalPos,
+            movesRemaining: player.movesRemaining - moveCost,
+        };
+
+        // Ice slide: after moving, slide 1 extra tile in the same direction
+        if (terrain === TerrainType.ICE) {
+            const slidePos = resolveIceSlide(player.position, to, getAllPlayers());
+            if (slidePos) {
+                finalPos = slidePos;
+                updatedPlayer.position = finalPos;
+                addLog(`${player.name} slides on the ice!`);
+            }
+        }
+
+        // Ball pickup
+        let newBallPos = gameState.ballPosition;
+        if (gameState.ballPosition && finalPos.x === gameState.ballPosition.x && finalPos.y === gameState.ballPosition.y) {
+            const pickup = resolveBallPickup(player, weather);
+            if (pickup.log) addLog(pickup.log);
+            if (pickup.success) {
+                updatedPlayer.hasBall = true;
+                newBallPos = null;
+                if (!pickup.log) addLog(`${player.name} picked up the ball!`);
+            } else {
+                // Failed pickup — ball stays on ground
+                addLog(`The ball remains on the ground.`);
+            }
+        }
+
+        // Touchdown check
         let scoreHome = gameState.homeTeam.score;
         let scoreAway = gameState.awayTeam.score;
         let touchdown = false;
 
         if (updatedPlayer.hasBall) {
-            if (player.team === TeamSide.HOME && to.y >= BOARD_HEIGHT - 1) {
+            if (player.team === TeamSide.HOME && finalPos.y >= BOARD_HEIGHT - 1) {
                 scoreHome += 7;
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.homeTeam.name}!`);
-            } else if (player.team === TeamSide.AWAY && to.y <= 0) {
+            } else if (player.team === TeamSide.AWAY && finalPos.y <= 0) {
                 scoreAway += 7;
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.awayTeam.name}!`);
@@ -248,10 +309,10 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         updatePlayerState(updatedPlayer, { ballPosition: newBallPos, homeScore: scoreHome, awayScore: scoreAway });
 
         if (touchdown) handleTouchdown();
-    }, [gameState.ballPosition, gameState.homeTeam.score, gameState.homeTeam.name, gameState.awayTeam.score, gameState.awayTeam.name, addLog, updatePlayerState, handleTouchdown]);
+    }, [gameState.terrain, gameState.weather, gameState.ballPosition, gameState.homeTeam.score, gameState.homeTeam.name, gameState.awayTeam.score, gameState.awayTeam.name, getAllPlayers, addLog, updatePlayerState, handleTouchdown]);
 
     const handleTackle = useCallback((attacker: Player, defender: Player) => {
-        const result = resolveTackle(attacker, defender);
+        const result = resolveTackle(attacker, defender, gameState.terrain, gameState.weather);
         addLog(result.log);
 
         const updatedAttacker = { ...attacker, actionTaken: true, movesRemaining: 0 };
@@ -272,13 +333,15 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
                 };
                 addLog('The ball pops loose!');
             }
+        } else if (result.attackerInjured) {
+            updatedAttacker.isStunned = true;
         }
 
         updatePlayerState([updatedAttacker, updatedDefender], { ballPosition: newBallPos });
-    }, [gameState.ballPosition, addLog, updatePlayerState]);
+    }, [gameState.terrain, gameState.weather, gameState.ballPosition, addLog, updatePlayerState]);
 
     const handlePass = useCallback((thrower: Player, targetPos: Position) => {
-        const result = resolvePass(thrower, targetPos);
+        const result = resolvePass(thrower, targetPos, gameState.terrain, gameState.weather);
         addLog(result.log);
 
         let newBallPos: Position | null = null;
@@ -308,7 +371,7 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         const updates = [updatedThrower];
         if (updatedReceiver) updates.push(updatedReceiver);
         updatePlayerState(updates, { ballPosition: newBallPos });
-    }, [getAllPlayers, addLog, updatePlayerState]);
+    }, [gameState.terrain, gameState.weather, getAllPlayers, addLog, updatePlayerState]);
 
     const handleCastSpell = useCallback((player: Player, spellKey: SpellKey, targetPos: Position) => {
         const spell = SPELLS[spellKey];
@@ -414,31 +477,98 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     const endTurn = useCallback(() => {
         setGameState(prev => {
             const nextTeam = prev.currentTeam === TeamSide.HOME ? TeamSide.AWAY : TeamSide.HOME;
+            const newTurnNumber = nextTeam === TeamSide.HOME ? prev.turn + 1 : prev.turn;
+            const logs = [...prev.gameLog];
 
+            // --- Weather change every 4 turns ---
+            let newWeather = prev.weather;
+            if (newTurnNumber > 1 && newTurnNumber % 4 === 1 && nextTeam === TeamSide.HOME) {
+                newWeather = pickRandom(ALL_WEATHERS);
+                if (newWeather !== prev.weather) {
+                    logs.push(`The weather shifts to ${newWeather}!`);
+                }
+            }
+
+            // Refresh the active team
             const refreshTeam = (team: TeamData): TeamData => ({
                 ...team,
                 players: team.players.map(p => ({
                     ...p,
-                    movesRemaining: p.stats.move,
+                    movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, newWeather),
                     actionTaken: false,
                     isStunned: false,
                 })),
             });
 
-            const newTurnNumber = nextTeam === TeamSide.HOME ? prev.turn + 1 : prev.turn;
+            // --- Lava hazards at turn start ---
+            let allPlayersFlat = [
+                ...(nextTeam === TeamSide.HOME ? refreshTeam(prev.homeTeam) : prev.homeTeam).players,
+                ...(nextTeam === TeamSide.AWAY ? refreshTeam(prev.awayTeam) : prev.awayTeam).players,
+            ];
+
+            if (prev.terrain === TerrainType.LAVA) {
+                const hazards = generateLavaHazards(3);
+                for (const hazard of hazards) {
+                    const victim = allPlayersFlat.find(
+                        p => p.position.x === hazard.x && p.position.y === hazard.y
+                    );
+                    if (victim) {
+                        const result = resolveLavaHazard(victim);
+                        logs.push(result.log);
+                        if (result.stunned) {
+                            allPlayersFlat = allPlayersFlat.map(p =>
+                                p.id === victim.id ? { ...p, isStunned: true, movesRemaining: 0 } : p
+                            );
+                        }
+                    }
+                }
+            }
+
+            // --- Meteor strikes ---
+            if (newWeather === Weather.METEOR_SHOWER) {
+                const strikes = generateMeteorStrikes(2);
+                for (const strike of strikes) {
+                    const victim = allPlayersFlat.find(
+                        p => p.position.x === strike.x && p.position.y === strike.y
+                    );
+                    if (victim) {
+                        const result = resolveMeteorStrike(victim);
+                        logs.push(result.log);
+                        if (result.stunned) {
+                            allPlayersFlat = allPlayersFlat.map(p =>
+                                p.id === victim.id ? { ...p, isStunned: true, movesRemaining: 0 } : p
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Split players back into teams
+            const homePlayers = allPlayersFlat.filter(p => p.team === TeamSide.HOME);
+            const awayPlayers = allPlayersFlat.filter(p => p.team === TeamSide.AWAY);
+
+            const homeTeam = nextTeam === TeamSide.HOME
+                ? { ...prev.homeTeam, players: homePlayers }
+                : { ...prev.homeTeam, players: homePlayers };
+            const awayTeam = nextTeam === TeamSide.AWAY
+                ? { ...prev.awayTeam, players: awayPlayers }
+                : { ...prev.awayTeam, players: awayPlayers };
+
+            logs.push(`It is now the ${nextTeam} team's turn.`);
 
             return {
                 ...prev,
                 turn: newTurnNumber,
                 currentTeam: nextTeam,
                 selectedPlayerId: null,
-                homeTeam: nextTeam === TeamSide.HOME ? refreshTeam(prev.homeTeam) : prev.homeTeam,
-                awayTeam: nextTeam === TeamSide.AWAY ? refreshTeam(prev.awayTeam) : prev.awayTeam,
+                weather: newWeather,
+                homeTeam,
+                awayTeam,
+                gameLog: logs,
             };
         });
-        addLog(`Turn Ending. It is now the ${gameState.currentTeam === TeamSide.HOME ? 'AWAY' : 'HOME'} team's turn.`);
         cancelTargeting();
-    }, [gameState.currentTeam, addLog, cancelTargeting]);
+    }, [cancelTargeting]);
 
     return {
         gameState,
