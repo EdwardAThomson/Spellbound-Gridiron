@@ -11,6 +11,12 @@ export enum PlayerRole {
   WIZARD = 'Wizard'
 }
 
+export enum SpellKey {
+  FIREBALL = 'FIREBALL',
+  TELEPORT = 'TELEPORT',
+  HEAL = 'HEAL'
+}
+
 export enum TerrainType {
   GRASS = 'GRASS',
   MUD = 'MUD',
@@ -25,6 +31,13 @@ export enum Weather {
   METEOR_SHOWER = 'Meteor Shower'
 }
 
+export enum GamePhase {
+  MAIN_MENU = 'MAIN_MENU',
+  TEAM_SELECT = 'TEAM_SELECT',
+  PLAYING = 'PLAYING',
+  POST_GAME = 'POST_GAME'
+}
+
 export interface Position {
   x: number;
   y: number;
@@ -35,6 +48,13 @@ export interface PlayerStats {
   strength: number;
   skill: number;
   armor: number;
+}
+
+export interface SpellDefinition {
+  name: string;
+  cost: number;
+  range: number;
+  description: string;
 }
 
 export interface Player {
@@ -51,15 +71,28 @@ export interface Player {
   mana: number;
 }
 
+/** Blueprint for a team — defines roster composition and theme. */
+export interface TeamBlueprint {
+  id: string;
+  name: string;
+  race: string;
+  color: string;
+  roster: PlayerRole[];
+  description: string;
+}
+
+/** Runtime team data during a match. */
 export interface TeamData {
   name: string;
   race: string;
   color: string;
   players: Player[];
   score: number;
+  blueprintId: string;
 }
 
 export interface GameState {
+  phase: GamePhase;
   turn: number;
   currentTeam: TeamSide;
   homeTeam: TeamData;
