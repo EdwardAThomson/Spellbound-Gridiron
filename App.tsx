@@ -4,6 +4,7 @@ import { useGameEngine } from './hooks/useGameEngine';
 import MainMenu from './components/MainMenu';
 import TeamSelectScreen from './components/TeamSelectScreen';
 import GameScreen from './components/GameScreen';
+import PostGameScreen from './components/PostGameScreen';
 import RuleBookModal from './components/RuleBookModal';
 import SettingsModal from './components/SettingsModal';
 import { ApiKeysProvider } from './context/ApiKeysContext';
@@ -59,6 +60,15 @@ export default function App() {
                     onShowSettings={() => setShowSettings(true)}
                     onShowRules={() => setShowRules(true)}
                     onQuit={engine.goToMainMenu}
+                    onSummonWolf={engine.handleSummonWolf}
+                />
+            )}
+
+            {engine.gameState.phase === GamePhase.POST_GAME && (
+                <PostGameScreen
+                    gameState={engine.gameState}
+                    onRematch={engine.rematch}
+                    onMainMenu={engine.goToMainMenu}
                 />
             )}
 

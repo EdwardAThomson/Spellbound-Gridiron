@@ -41,6 +41,7 @@ interface GameScreenProps {
     onShowSettings: () => void;
     onShowRules: () => void;
     onQuit: () => void;
+    onSummonWolf: () => void;
 }
 
 export default function GameScreen({
@@ -61,6 +62,7 @@ export default function GameScreen({
     onShowSettings,
     onShowRules,
     onQuit,
+    onSummonWolf,
 }: GameScreenProps) {
     const [showSpellMenu, setShowSpellMenu] = useState(false);
     const terrainInfo = TERRAIN_CONFIG[gameState.terrain];
@@ -141,11 +143,21 @@ export default function GameScreen({
                     <span>⚙️</span> Configure AI Models
                 </button>
 
+                {/* Terrain & Weather Bar */}
+                <div className="mb-3 flex gap-2">
+                    <div className={`flex-1 text-center py-1.5 rounded text-[10px] font-bold uppercase tracking-widest border bg-gradient-to-r ${terrainInfo.color} border-white/10`}>
+                        {terrainInfo.name}
+                    </div>
+                    <div className="flex-1 text-center py-1.5 rounded text-[10px] font-bold uppercase tracking-widest border border-white/10 bg-stone-800">
+                        {gameState.weather}
+                    </div>
+                </div>
+
                 {/* Scoreboard */}
                 <div className="bg-black/50 p-4 rounded-xl border border-white/10 mb-4">
                     <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
                         <span>TURN {gameState.turn}</span>
-                        <span className="uppercase tracking-wider">{gameState.weather}</span>
+                        <span className="text-xs text-amber-400/60">First to {21}</span>
                     </div>
                     <div className="flex justify-between items-center text-2xl font-bold font-fantasy">
                         <div className="text-blue-400 flex flex-col items-center">
@@ -186,12 +198,44 @@ export default function GameScreen({
 
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div className="bg-black/30 p-2 rounded border border-white/5 flex items-center gap-2">
-                                        <span className="text-red-400 font-bold">STR</span> {selectedPlayer.stats.strength}
+                                        <span className="text-red-400 font-bold">STR</span> {selectedPlayer.stats.strength}{selectedPlayer.fury > 0 && <span className="text-orange-400">+{selectedPlayer.fury}</span>}
                                     </div>
                                     <div className="bg-black/30 p-2 rounded border border-white/5 flex items-center gap-2">
                                         <span className="text-blue-400 font-bold">SKL</span> {selectedPlayer.stats.skill}
                                     </div>
                                 </div>
+
+                                {/* Role-specific indicators */}
+                                {selectedPlayer.role === PlayerRole.BERSERKER && (
+                                    <div className="bg-orange-900/30 border border-orange-500/20 rounded p-2 text-xs">
+                                        <span className="text-orange-400 font-bold">FURY</span>
+                                        <div className="flex gap-1 mt-1">
+                                            {[0, 1, 2].map(i => (
+                                                <div key={i} className={`h-2 flex-1 rounded ${i < selectedPlayer.fury ? 'bg-orange-500' : 'bg-orange-900/50'}`} />
+                                            ))}
+                                        </div>
+                                        <p className="text-[10px] text-orange-400/60 mt-1">Gains strength from combat</p>
+                                    </div>
+                                )}
+                                {selectedPlayer.role === PlayerRole.ASSASSIN && (
+                                    <div className="bg-violet-900/30 border border-violet-500/20 rounded p-2 text-xs text-violet-300">
+                                        <span className="font-bold">SHADOW</span>
+                                        <p className="text-[10px] text-violet-400/60 mt-1">Can move through units. Backstab: +2 STR from behind.</p>
+                                    </div>
+                                )}
+                                {selectedPlayer.role === PlayerRole.BEASTMASTER && (
+                                    <div className="bg-emerald-900/30 border border-emerald-500/20 rounded p-2 text-xs text-emerald-300">
+                                        <span className="font-bold">BEAST BOND</span>
+                                        <p className="text-[10px] text-emerald-400/60 mt-1">
+                                            {selectedPlayer.hasSummoned ? 'Wolf already summoned.' : 'Can summon a wolf companion (1x per game).'}
+                                        </p>
+                                    </div>
+                                )}
+                                {selectedPlayer.isSummon && (
+                                    <div className="bg-emerald-900/30 border border-emerald-500/20 rounded p-2 text-xs text-emerald-300">
+                                        <span className="font-bold">SUMMONED UNIT</span>
+                                    </div>
+                                )}
 
                                 {/* Action Buttons */}
                                 <div className="mt-4 space-y-2">
@@ -232,6 +276,16 @@ export default function GameScreen({
                                                 </div>
                                             )}
                                         </div>
+                                    )}
+
+                                    {/* Beastmaster Summon */}
+                                    {selectedPlayer.role === PlayerRole.BEASTMASTER && !selectedPlayer.hasSummoned && !selectedPlayer.actionTaken && (
+                                        <button
+                                            onClick={onSummonWolf}
+                                            className="w-full py-2 bg-emerald-900/50 hover:bg-emerald-800/50 border border-emerald-500/30 rounded text-emerald-200 text-xs transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <span>🐺</span> Summon Wolf
+                                        </button>
                                     )}
 
                                     {interactionMode === 'TARGETING' && (

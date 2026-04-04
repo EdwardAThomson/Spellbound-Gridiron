@@ -8,7 +8,10 @@ export enum PlayerRole {
   QUARTERBACK = 'Quarterback',
   LINEMAN = 'Lineman',
   CATCHER = 'Catcher',
-  WIZARD = 'Wizard'
+  WIZARD = 'Wizard',
+  BERSERKER = 'Berserker',
+  ASSASSIN = 'Assassin',
+  BEASTMASTER = 'Beastmaster'
 }
 
 export enum SpellKey {
@@ -69,6 +72,9 @@ export interface Player {
   movesRemaining: number;
   actionTaken: boolean;
   mana: number;
+  fury: number;            // Berserker: bonus strength from combat (0-3)
+  hasSummoned: boolean;    // Beastmaster: whether wolf has been summoned this game
+  isSummon: boolean;       // True for summoned companion units (wolves, etc.)
 }
 
 /** Blueprint for a team — defines roster composition and theme. */

@@ -9,7 +9,8 @@ export const createPlayer = (
   role: PlayerRole,
   team: TeamSide,
   x: number,
-  y: number
+  y: number,
+  isSummon: boolean = false,
 ): Player => {
   return {
     id,
@@ -23,6 +24,46 @@ export const createPlayer = (
     movesRemaining: ROLE_STATS[role].move,
     actionTaken: false,
     mana: role === PlayerRole.WIZARD ? INITIAL_MANA : 0,
+    fury: 0,
+    hasSummoned: false,
+    isSummon,
+  };
+};
+
+// --- Wolf companion stats (used by Beastmaster summon) ---
+export const WOLF_STATS: PlayerStats = { move: 6, strength: 2, skill: 1, armor: 5 };
+
+export const createWolf = (
+  beastmaster: Player,
+  spawnPos: Position,
+  allPlayers: Player[],
+): Player | null => {
+  // Find an empty adjacent tile to spawn the wolf
+  const candidates = [
+    { x: spawnPos.x + 1, y: spawnPos.y },
+    { x: spawnPos.x - 1, y: spawnPos.y },
+    { x: spawnPos.x, y: spawnPos.y + 1 },
+    { x: spawnPos.x, y: spawnPos.y - 1 },
+  ].filter(p => isPositionValid(p) && !getPlayerAtPosition(p, allPlayers));
+
+  if (candidates.length === 0) return null;
+
+  const pos = candidates[0];
+  return {
+    id: `${beastmaster.id}-wolf`,
+    name: `${beastmaster.name}'s Wolf`,
+    role: PlayerRole.BLITZER, // Wolves act like basic blitzers
+    team: beastmaster.team,
+    position: pos,
+    stats: WOLF_STATS,
+    hasBall: false,
+    isStunned: false,
+    movesRemaining: WOLF_STATS.move,
+    actionTaken: false,
+    mana: 0,
+    fury: 0,
+    hasSummoned: false,
+    isSummon: true,
   };
 };
 
@@ -185,8 +226,19 @@ export const resolveMeteorStrike = (player: Player): { stunned: boolean; log: st
 export interface TackleResult {
     success: boolean;
     attackerInjured: boolean;
+    furyGained: boolean;  // Berserker gains fury from combat
     log: string;
 }
+
+/** Check if an assassin is attacking "from behind" (closer to defender's endzone). */
+export const isBackstab = (attacker: Player, defender: Player): boolean => {
+    if (attacker.role !== PlayerRole.ASSASSIN) return false;
+    // HOME scores at bottom (high y), AWAY scores at top (low y)
+    if (defender.team === TeamSide.HOME) {
+        return attacker.position.y > defender.position.y; // Attacking from behind (toward HOME endzone)
+    }
+    return attacker.position.y < defender.position.y; // Attacking from behind (toward AWAY endzone)
+};
 
 export const resolveTackle = (
     attacker: Player,
@@ -195,29 +247,51 @@ export const resolveTackle = (
     weather: Weather = Weather.CLEAR
 ): TackleResult => {
     const terrainMod = getTerrainTackleModifier(terrain);
-    const attackRoll = rollDice(6) + attacker.stats.strength + terrainMod.attacker;
-    const defendRoll = rollDice(6) + defender.stats.strength + terrainMod.defender;
 
-    // Armor: on a failed tackle, check if attacker gets injured (stunned)
+    // Berserker fury: adds bonus strength from accumulated fury
+    const furyBonus = attacker.role === PlayerRole.BERSERKER ? attacker.fury : 0;
+
+    // Assassin backstab: +2 strength when attacking from behind
+    const backstabBonus = isBackstab(attacker, defender) ? 2 : 0;
+
+    const attackStr = attacker.stats.strength + terrainMod.attacker + furyBonus + backstabBonus;
+    const defendStr = defender.stats.strength + terrainMod.defender;
+
+    const attackRoll = rollDice(6) + attackStr;
+    const defendRoll = rollDice(6) + defendStr;
+
+    // Build modifier label for log
+    const modifiers: string[] = [];
+    if (furyBonus > 0) modifiers.push(`Fury +${furyBonus}`);
+    if (backstabBonus > 0) modifiers.push('Backstab +2');
+    const modLabel = modifiers.length > 0 ? ` [${modifiers.join(', ')}]` : '';
+
+    // Berserker gains fury from ANY tackle (win or lose), capped at 3
+    const canGainFury = attacker.role === PlayerRole.BERSERKER && attacker.fury < 3;
+
     if (attackRoll > defendRoll) {
         return {
             success: true,
             attackerInjured: false,
-            log: `${attacker.name} smashed ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!`,
+            furyGained: canGainFury,
+            log: `${attacker.name} smashed ${defender.name}${modLabel} (Roll: ${attackRoll} vs ${defendRoll})!`,
         };
     }
 
     // Failed tackle — armor check for attacker injury
     const injuryRoll = rollDice(6);
-    const armorThreshold = Math.max(1, defender.stats.armor - 6); // High armor = more likely to hurt attacker
+    const armorThreshold = Math.max(1, defender.stats.armor - 6);
     const attackerInjured = injuryRoll <= armorThreshold;
 
-    let log = `${attacker.name} bounced off ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!`;
+    let log = `${attacker.name} bounced off ${defender.name}${modLabel} (Roll: ${attackRoll} vs ${defendRoll})!`;
     if (attackerInjured) {
         log += ` ${attacker.name} is dazed from the impact!`;
     }
+    if (canGainFury) {
+        log += ` ${attacker.name}'s rage intensifies!`;
+    }
 
-    return { success: false, attackerInjured, log };
+    return { success: false, attackerInjured, furyGained: canGainFury, log };
 };
 
 export const resolvePass = (

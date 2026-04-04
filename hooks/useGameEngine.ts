@@ -5,12 +5,12 @@ import {
     TeamBlueprint
 } from '../types';
 import {
-    createPlayer, getPlayerAtPosition, isPositionValid, isAdjacent,
+    createPlayer, createWolf, getPlayerAtPosition, isPositionValid, isAdjacent,
     resolveTackle, resolvePass, getMovementCost, resolveIceSlide,
     resolveBallPickup, generateLavaHazards, resolveLavaHazard,
     generateMeteorStrikes, resolveMeteorStrike, getEffectiveMovement
 } from '../services/gameUtils';
-import { SPELLS } from '../constants';
+import { SPELLS, TEAM_BLUEPRINTS } from '../constants';
 import { generateCommentary, generateTeamName } from '../services/gameAiService';
 import { ApiKeysContext } from '../context/ApiKeysContext';
 import { LLMProvider } from '../utils/llmHelper';
@@ -18,6 +18,7 @@ import { LLMProvider } from '../utils/llmHelper';
 type InteractionMode = 'DEFAULT' | 'TARGETING';
 type TargetAction = 'PASS' | 'SPELL';
 
+const WINNING_SCORE = 21;
 const ALL_TERRAINS = [TerrainType.GRASS, TerrainType.MUD, TerrainType.LAVA, TerrainType.ICE];
 const ALL_WEATHERS = [Weather.CLEAR, Weather.RAIN, Weather.BLIZZARD, Weather.METEOR_SHOWER];
 
@@ -224,6 +225,23 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     const handleTouchdown = useCallback(() => {
         setTimeout(() => {
             setGameState(prev => {
+                // Check for game-over (first to WINNING_SCORE)
+                const homeScore = prev.homeTeam.score;
+                const awayScore = prev.awayTeam.score;
+
+                if (homeScore >= WINNING_SCORE || awayScore >= WINNING_SCORE) {
+                    const winner = homeScore >= WINNING_SCORE ? TeamSide.HOME : TeamSide.AWAY;
+                    const winnerName = winner === TeamSide.HOME ? prev.homeTeam.name : prev.awayTeam.name;
+                    return {
+                        ...prev,
+                        phase: GamePhase.POST_GAME,
+                        isGameOver: true,
+                        winner,
+                        gameLog: [...prev.gameLog, `GAME OVER! ${winnerName} wins with ${Math.max(homeScore, awayScore)} points!`],
+                    };
+                }
+
+                // Reset for kickoff
                 const home = prev.homeTeam.players.map(p => ({
                     ...p,
                     hasBall: false,
@@ -318,6 +336,11 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         const updatedAttacker = { ...attacker, actionTaken: true, movesRemaining: 0 };
         const updatedDefender = { ...defender };
         let newBallPos = gameState.ballPosition;
+
+        // Berserker fury: gain +1 fury from combat (capped at 3)
+        if (result.furyGained) {
+            updatedAttacker.fury = Math.min(3, updatedAttacker.fury + 1);
+        }
 
         if (result.success) {
             updatedDefender.isStunned = true;
@@ -446,6 +469,7 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
             if (selectedPlayer.actionTaken) return;
             const isAdj = isAdjacent(selectedPlayer.position, targetPos);
 
+            // Tackle: click adjacent enemy
             if (clickedPlayer && clickedPlayer.team !== gameState.currentTeam && isAdj) {
                 if (selectedPlayer.movesRemaining > 0) {
                     handleTackle(selectedPlayer, clickedPlayer);
@@ -455,7 +479,11 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
                 return;
             }
 
-            if (!clickedPlayer && isPositionValid(targetPos)) {
+            // Movement
+            const canMoveThroughOccupied = selectedPlayer.role === PlayerRole.ASSASSIN;
+            const tileBlocked = clickedPlayer && !canMoveThroughOccupied;
+
+            if (!tileBlocked && isPositionValid(targetPos)) {
                 if (isAdj && selectedPlayer.movesRemaining > 0) {
                     handleMove(selectedPlayer, targetPos);
                 } else if (!isAdj) {
@@ -464,6 +492,44 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
             }
         }
     }, [gameState.isGameOver, gameState.currentTeam, getSelectedPlayer, getAllPlayers, interactionMode, targetingAction, activeSpellKey, handlePass, handleCastSpell, handleTackle, handleMove, addLog, cancelTargeting]);
+
+    // --- Beastmaster Summon ---
+
+    const handleSummonWolf = useCallback(() => {
+        const selected = getSelectedPlayer();
+        if (!selected || selected.role !== PlayerRole.BEASTMASTER) return;
+        if (selected.hasSummoned) {
+            addLog(`${selected.name} has already summoned a companion this game!`);
+            return;
+        }
+        if (selected.actionTaken) return;
+
+        const wolf = createWolf(selected, selected.position, getAllPlayers());
+        if (!wolf) {
+            addLog('No room to summon a companion!');
+            return;
+        }
+
+        addLog(`${selected.name} calls forth a loyal wolf companion!`);
+
+        // Add wolf to the team and mark beastmaster as having summoned
+        setGameState(prev => {
+            const teamKey = selected.team === TeamSide.HOME ? 'homeTeam' : 'awayTeam';
+            const team = prev[teamKey];
+            return {
+                ...prev,
+                [teamKey]: {
+                    ...team,
+                    players: [
+                        ...team.players.map(p =>
+                            p.id === selected.id ? { ...p, hasSummoned: true, actionTaken: true } : p
+                        ),
+                        wolf,
+                    ],
+                },
+            };
+        });
+    }, [getSelectedPlayer, getAllPlayers, addLog]);
 
     // --- Turn Management ---
 
@@ -570,6 +636,51 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         cancelTargeting();
     }, [cancelTargeting]);
 
+    // --- Rematch: restart with the same teams ---
+
+    const rematch = useCallback(() => {
+        setGameState(prev => {
+            const homeBp = TEAM_BLUEPRINTS.find(t => t.id === prev.homeTeam.blueprintId);
+            const awayBp = TEAM_BLUEPRINTS.find(t => t.id === prev.awayTeam.blueprintId);
+            if (!homeBp || !awayBp) return createInitialGameState();
+
+            const terrain = pickRandom(ALL_TERRAINS);
+            const weather = pickRandom(ALL_WEATHERS);
+            const homePlayers = setupTeamFromBlueprint(homeBp, TeamSide.HOME, 1, 1).map(p => ({
+                ...p,
+                movesRemaining: getEffectiveMovement(p.stats.move, terrain, weather),
+            }));
+            const awayPlayers = setupTeamFromBlueprint(awayBp, TeamSide.AWAY, 16, -1).map(p => ({
+                ...p,
+                movesRemaining: getEffectiveMovement(p.stats.move, terrain, weather),
+            }));
+
+            return {
+                ...createInitialGameState(),
+                phase: GamePhase.PLAYING,
+                terrain,
+                weather,
+                homeTeam: {
+                    name: homeBp.name,
+                    race: homeBp.race,
+                    color: homeBp.color,
+                    score: 0,
+                    players: homePlayers,
+                    blueprintId: homeBp.id,
+                },
+                awayTeam: {
+                    name: awayBp.name,
+                    race: awayBp.race,
+                    color: awayBp.color,
+                    score: 0,
+                    players: awayPlayers,
+                    blueprintId: awayBp.id,
+                },
+                gameLog: ['Rematch! The teams take the field again.', `Terrain: ${terrain}. Weather: ${weather}.`],
+            };
+        });
+    }, []);
+
     return {
         gameState,
         isAiThinking,
@@ -585,6 +696,7 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
 
         // Game setup
         startGame,
+        rematch,
 
         // Actions
         handleTileClick,
@@ -592,5 +704,6 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
         cancelTargeting,
         endPlayerAction,
         endTurn,
+        handleSummonWolf,
     };
 }

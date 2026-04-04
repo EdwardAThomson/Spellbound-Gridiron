@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-    createPlayer, isPositionValid, getDistance, isAdjacent,
+    createPlayer, createWolf, isPositionValid, getDistance, isAdjacent,
     getPlayerAtPosition, rollDice, resolveTackle, resolvePass,
+    isBackstab,
     getMovementCost, getTerrainTackleModifier, getTerrainPassModifier,
     getWeatherPassModifier, getWeatherMovementModifier,
     weatherRequiresBallPickupCheck, resolveBallPickup,
@@ -194,5 +195,85 @@ describe('getEffectiveMovement', () => {
     });
     it('returns base in clear grass', () => {
         expect(getEffectiveMovement(6, TerrainType.GRASS, Weather.CLEAR)).toBe(6);
+    });
+});
+
+// --- New Player Roles ---
+
+describe('createPlayer - new roles', () => {
+    it('creates a berserker with fury at 0', () => {
+        const b = createPlayer('b', 'Berserker', PlayerRole.BERSERKER, TeamSide.HOME, 0, 0);
+        expect(b.fury).toBe(0);
+        expect(b.stats.strength).toBe(3);
+        expect(b.stats.move).toBe(5);
+    });
+    it('creates an assassin', () => {
+        const a = createPlayer('a', 'Assassin', PlayerRole.ASSASSIN, TeamSide.AWAY, 0, 0);
+        expect(a.stats.move).toBe(7);
+        expect(a.stats.skill).toBe(4);
+        expect(a.stats.armor).toBe(6);
+    });
+    it('creates a beastmaster with hasSummoned false', () => {
+        const bm = createPlayer('bm', 'BM', PlayerRole.BEASTMASTER, TeamSide.HOME, 0, 0);
+        expect(bm.hasSummoned).toBe(false);
+        expect(bm.isSummon).toBe(false);
+    });
+});
+
+describe('isBackstab', () => {
+    it('returns true when assassin attacks from behind (HOME defender)', () => {
+        const assassin = createPlayer('a', 'A', PlayerRole.ASSASSIN, TeamSide.AWAY, 5, 10);
+        const defender = createPlayer('d', 'D', PlayerRole.LINEMAN, TeamSide.HOME, 5, 9);
+        // HOME scores at bottom (high y), so attacking from higher y = from behind
+        expect(isBackstab(assassin, defender)).toBe(true);
+    });
+    it('returns false for non-assassin', () => {
+        const blitzer = createPlayer('b', 'B', PlayerRole.BLITZER, TeamSide.AWAY, 5, 10);
+        const defender = createPlayer('d', 'D', PlayerRole.LINEMAN, TeamSide.HOME, 5, 9);
+        expect(isBackstab(blitzer, defender)).toBe(false);
+    });
+    it('returns false when attacking from front', () => {
+        const assassin = createPlayer('a', 'A', PlayerRole.ASSASSIN, TeamSide.AWAY, 5, 8);
+        const defender = createPlayer('d', 'D', PlayerRole.LINEMAN, TeamSide.HOME, 5, 9);
+        expect(isBackstab(assassin, defender)).toBe(false);
+    });
+});
+
+describe('resolveTackle - berserker fury', () => {
+    it('includes furyGained flag for berserker', () => {
+        const berserker = createPlayer('b', 'Berserker', PlayerRole.BERSERKER, TeamSide.HOME, 0, 0);
+        const defender = createPlayer('d', 'D', PlayerRole.LINEMAN, TeamSide.AWAY, 1, 0);
+        const result = resolveTackle(berserker, defender);
+        expect(result).toHaveProperty('furyGained');
+        expect(result.furyGained).toBe(true); // fury 0 < 3, so should gain
+    });
+    it('does not gain fury when already at max', () => {
+        const berserker = { ...createPlayer('b', 'Berserker', PlayerRole.BERSERKER, TeamSide.HOME, 0, 0), fury: 3 };
+        const defender = createPlayer('d', 'D', PlayerRole.LINEMAN, TeamSide.AWAY, 1, 0);
+        const result = resolveTackle(berserker, defender);
+        expect(result.furyGained).toBe(false);
+    });
+});
+
+describe('createWolf', () => {
+    it('creates a wolf adjacent to beastmaster', () => {
+        const bm = createPlayer('bm', 'BM', PlayerRole.BEASTMASTER, TeamSide.HOME, 5, 5);
+        const wolf = createWolf(bm, bm.position, [bm]);
+        expect(wolf).not.toBeNull();
+        expect(wolf!.isSummon).toBe(true);
+        expect(wolf!.name).toContain('Wolf');
+        expect(wolf!.team).toBe(TeamSide.HOME);
+    });
+    it('returns null when all adjacent tiles are blocked', () => {
+        const bm = createPlayer('bm', 'BM', PlayerRole.BEASTMASTER, TeamSide.HOME, 0, 0);
+        // Block all valid adjacent tiles
+        const blockers = [
+            createPlayer('b1', 'B1', PlayerRole.LINEMAN, TeamSide.HOME, 1, 0),
+            createPlayer('b2', 'B2', PlayerRole.LINEMAN, TeamSide.HOME, 0, 1),
+        ];
+        // Position (0,0) has only (1,0) and (0,1) as valid adjacent (others are off-board)
+        // Actually (-1,0) and (0,-1) are invalid, so only 2 adjacent valid tiles
+        const wolf = createWolf(bm, bm.position, [bm, ...blockers]);
+        expect(wolf).toBeNull();
     });
 });
