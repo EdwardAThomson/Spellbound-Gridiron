@@ -18,7 +18,7 @@ import { LLMProvider } from '../utils/llmHelper';
 type InteractionMode = 'DEFAULT' | 'TARGETING';
 type TargetAction = 'PASS' | 'SPELL';
 
-const WINNING_SCORE = 21;
+const TURNS_PER_HALF = 8;
 const ALL_TERRAINS = [TerrainType.GRASS, TerrainType.MUD, TerrainType.LAVA, TerrainType.ICE];
 const ALL_WEATHERS = [Weather.CLEAR, Weather.RAIN, Weather.BLIZZARD, Weather.METEOR_SHOWER];
 
@@ -39,6 +39,9 @@ function createInitialGameState(): GameState {
     return {
         phase: GamePhase.MAIN_MENU,
         turn: 1,
+        half: 1,
+        turnsPerHalf: TURNS_PER_HALF,
+        kickingTeam: TeamSide.HOME,
         currentTeam: TeamSide.HOME,
         homeTeam: EMPTY_TEAM,
         awayTeam: EMPTY_TEAM,
@@ -225,33 +228,24 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     const handleTouchdown = useCallback(() => {
         setTimeout(() => {
             setGameState(prev => {
-                // Check for game-over (first to WINNING_SCORE)
-                const homeScore = prev.homeTeam.score;
-                const awayScore = prev.awayTeam.score;
+                // Reset positions for kickoff (respect current side orientation)
+                // In half 1: HOME starts at top (low y), AWAY at bottom (high y)
+                // In half 2: sides are swapped
+                const homeStartY = prev.half === 1 ? 1 : 14;
+                const awayStartY = prev.half === 1 ? 16 : 3;
+                const homeSpread = prev.half === 1 ? 1 : -1;
+                const awaySpread = prev.half === 1 ? -1 : 1;
 
-                if (homeScore >= WINNING_SCORE || awayScore >= WINNING_SCORE) {
-                    const winner = homeScore >= WINNING_SCORE ? TeamSide.HOME : TeamSide.AWAY;
-                    const winnerName = winner === TeamSide.HOME ? prev.homeTeam.name : prev.awayTeam.name;
-                    return {
-                        ...prev,
-                        phase: GamePhase.POST_GAME,
-                        isGameOver: true,
-                        winner,
-                        gameLog: [...prev.gameLog, `GAME OVER! ${winnerName} wins with ${Math.max(homeScore, awayScore)} points!`],
-                    };
-                }
-
-                // Reset for kickoff
                 const home = prev.homeTeam.players.map(p => ({
                     ...p,
                     hasBall: false,
-                    position: { x: p.position.x, y: 1 + Math.floor(Math.random() * 3) },
+                    position: { x: p.position.x, y: homeStartY + Math.floor(Math.random() * 3) * homeSpread },
                     movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, prev.weather),
                 }));
                 const away = prev.awayTeam.players.map(p => ({
                     ...p,
                     hasBall: false,
-                    position: { x: p.position.x, y: 16 - Math.floor(Math.random() * 3) },
+                    position: { x: p.position.x, y: awayStartY + Math.floor(Math.random() * 3) * awaySpread },
                     movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, prev.weather),
                 }));
                 return {
@@ -307,17 +301,25 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
             }
         }
 
-        // Touchdown check
+        // Touchdown check — endzone depends on half
+        // Half 1: HOME scores at bottom (y >= 17), AWAY at top (y <= 0)
+        // Half 2: HOME scores at top (y <= 0), AWAY at bottom (y >= 17)
         let scoreHome = gameState.homeTeam.score;
         let scoreAway = gameState.awayTeam.score;
         let touchdown = false;
 
         if (updatedPlayer.hasBall) {
-            if (player.team === TeamSide.HOME && finalPos.y >= BOARD_HEIGHT - 1) {
+            const homeScoresAtBottom = gameState.half === 1;
+            const isHomeTd = player.team === TeamSide.HOME &&
+                (homeScoresAtBottom ? finalPos.y >= BOARD_HEIGHT - 1 : finalPos.y <= 0);
+            const isAwayTd = player.team === TeamSide.AWAY &&
+                (homeScoresAtBottom ? finalPos.y <= 0 : finalPos.y >= BOARD_HEIGHT - 1);
+
+            if (isHomeTd) {
                 scoreHome += 7;
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.homeTeam.name}!`);
-            } else if (player.team === TeamSide.AWAY && finalPos.y <= 0) {
+            } else if (isAwayTd) {
                 scoreAway += 7;
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.awayTeam.name}!`);
@@ -543,8 +545,50 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
     const endTurn = useCallback(() => {
         setGameState(prev => {
             const nextTeam = prev.currentTeam === TeamSide.HOME ? TeamSide.AWAY : TeamSide.HOME;
+            // A full "turn" ticks after both teams have gone (when HOME starts again)
             const newTurnNumber = nextTeam === TeamSide.HOME ? prev.turn + 1 : prev.turn;
             const logs = [...prev.gameLog];
+
+            // --- Check if the half is over ---
+            // Turn number is per-half. After both teams play turnsPerHalf turns, half ends.
+            // Turn increments when it becomes HOME's turn, so end of half is when
+            // newTurnNumber > turnsPerHalf and nextTeam is HOME (meaning both sides played).
+            const halfOver = newTurnNumber > prev.turnsPerHalf && nextTeam === TeamSide.HOME;
+
+            if (halfOver) {
+                if (prev.half === 1) {
+                    // Halftime
+                    logs.push(`--- HALFTIME --- Score: ${prev.homeTeam.name} ${prev.homeTeam.score} - ${prev.awayTeam.score} ${prev.awayTeam.name}`);
+                    return {
+                        ...prev,
+                        phase: GamePhase.HALFTIME,
+                        selectedPlayerId: null,
+                        gameLog: logs,
+                    };
+                } else {
+                    // Game over — end of 2nd half
+                    const homeScore = prev.homeTeam.score;
+                    const awayScore = prev.awayTeam.score;
+                    let winner: TeamSide | null = null;
+                    if (homeScore > awayScore) winner = TeamSide.HOME;
+                    else if (awayScore > homeScore) winner = TeamSide.AWAY;
+                    // null = draw
+
+                    const winnerLabel = winner
+                        ? `${winner === TeamSide.HOME ? prev.homeTeam.name : prev.awayTeam.name} wins!`
+                        : "It's a draw!";
+                    logs.push(`FULL TIME! ${prev.homeTeam.name} ${homeScore} - ${awayScore} ${prev.awayTeam.name}. ${winnerLabel}`);
+
+                    return {
+                        ...prev,
+                        phase: GamePhase.POST_GAME,
+                        isGameOver: true,
+                        winner,
+                        selectedPlayerId: null,
+                        gameLog: logs,
+                    };
+                }
+            }
 
             // --- Weather change every 4 turns ---
             let newWeather = prev.weather;
@@ -613,14 +657,7 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
             const homePlayers = allPlayersFlat.filter(p => p.team === TeamSide.HOME);
             const awayPlayers = allPlayersFlat.filter(p => p.team === TeamSide.AWAY);
 
-            const homeTeam = nextTeam === TeamSide.HOME
-                ? { ...prev.homeTeam, players: homePlayers }
-                : { ...prev.homeTeam, players: homePlayers };
-            const awayTeam = nextTeam === TeamSide.AWAY
-                ? { ...prev.awayTeam, players: awayPlayers }
-                : { ...prev.awayTeam, players: awayPlayers };
-
-            logs.push(`It is now the ${nextTeam} team's turn.`);
+            logs.push(`Turn ${newTurnNumber}/${prev.turnsPerHalf} (Half ${prev.half}). ${nextTeam}'s turn.`);
 
             return {
                 ...prev,
@@ -628,13 +665,59 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
                 currentTeam: nextTeam,
                 selectedPlayerId: null,
                 weather: newWeather,
-                homeTeam,
-                awayTeam,
+                homeTeam: { ...prev.homeTeam, players: homePlayers },
+                awayTeam: { ...prev.awayTeam, players: awayPlayers },
                 gameLog: logs,
             };
         });
         cancelTargeting();
     }, [cancelTargeting]);
+
+    // --- Halftime: swap sides and start 2nd half ---
+
+    const startSecondHalf = useCallback(() => {
+        setGameState(prev => {
+            const newWeather = pickRandom(ALL_WEATHERS);
+            const logs = [...prev.gameLog,
+                '--- SECOND HALF ---',
+                `Teams switch sides! Weather: ${newWeather}.`,
+            ];
+
+            // Flip all player positions vertically and reset state
+            // Remove summoned wolves for a clean 2nd half
+            const flipAndReset = (players: Player[], startY: number, spread: number) =>
+                players.filter(p => !p.isSummon).map((p, i) => ({
+                    ...p,
+                    position: { x: [2, 4, 6, 8, 10][i % 5], y: startY + Math.floor(Math.random() * 3) * spread },
+                    hasBall: false,
+                    isStunned: false,
+                    actionTaken: false,
+                    movesRemaining: getEffectiveMovement(p.stats.move, prev.terrain, newWeather),
+                    // Keep fury and hasSummoned — they persist across halves
+                }));
+
+            // Half 2: HOME starts at bottom (high y), AWAY at top (low y)
+            const homePlayers = flipAndReset(prev.homeTeam.players, 14, -1);
+            const awayPlayers = flipAndReset(prev.awayTeam.players, 3, 1);
+
+            // The team that kicked off in half 1 now receives
+            const secondHalfStarter = prev.kickingTeam === TeamSide.HOME ? TeamSide.AWAY : TeamSide.HOME;
+
+            return {
+                ...prev,
+                phase: GamePhase.PLAYING,
+                half: 2 as const,
+                turn: 1,
+                currentTeam: secondHalfStarter,
+                weather: newWeather,
+                ballPosition: { x: 6, y: 9 },
+                selectedPlayerId: null,
+                homeTeam: { ...prev.homeTeam, players: homePlayers },
+                awayTeam: { ...prev.awayTeam, players: awayPlayers },
+                gameLog: logs,
+            };
+        });
+    }, []);
 
     // --- Rematch: restart with the same teams ---
 
@@ -696,6 +779,7 @@ export function useGameEngine(gameProvider: LLMProvider, gameModel: string) {
 
         // Game setup
         startGame,
+        startSecondHalf,
         rematch,
 
         // Actions

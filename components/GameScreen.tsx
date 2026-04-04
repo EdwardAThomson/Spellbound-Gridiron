@@ -87,9 +87,11 @@ export default function GameScreen({
                     }
                 }
 
+                // Endzones flip at halftime
+                const homeScoresAtBottom = gameState.half === 1;
                 let endZone = null;
-                if (y === 0) endZone = TeamSide.AWAY;
-                if (y === BOARD_HEIGHT - 1) endZone = TeamSide.HOME;
+                if (y === 0) endZone = homeScoresAtBottom ? TeamSide.AWAY : TeamSide.HOME;
+                if (y === BOARD_HEIGHT - 1) endZone = homeScoresAtBottom ? TeamSide.HOME : TeamSide.AWAY;
 
                 tiles.push(
                     <BoardTile
@@ -156,8 +158,8 @@ export default function GameScreen({
                 {/* Scoreboard */}
                 <div className="bg-black/50 p-4 rounded-xl border border-white/10 mb-4">
                     <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
-                        <span>TURN {gameState.turn}</span>
-                        <span className="text-xs text-amber-400/60">First to {21}</span>
+                        <span>TURN {gameState.turn}/{gameState.turnsPerHalf}</span>
+                        <span className="text-xs text-amber-400/60">Half {gameState.half}/2</span>
                     </div>
                     <div className="flex justify-between items-center text-2xl font-bold font-fantasy">
                         <div className="text-blue-400 flex flex-col items-center">

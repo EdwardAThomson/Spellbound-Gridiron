@@ -5,6 +5,7 @@ import MainMenu from './components/MainMenu';
 import TeamSelectScreen from './components/TeamSelectScreen';
 import GameScreen from './components/GameScreen';
 import PostGameScreen from './components/PostGameScreen';
+import HalftimeScreen from './components/HalftimeScreen';
 import RuleBookModal from './components/RuleBookModal';
 import SettingsModal from './components/SettingsModal';
 import { ApiKeysProvider } from './context/ApiKeysContext';
@@ -61,6 +62,13 @@ export default function App() {
                     onShowRules={() => setShowRules(true)}
                     onQuit={engine.goToMainMenu}
                     onSummonWolf={engine.handleSummonWolf}
+                />
+            )}
+
+            {engine.gameState.phase === GamePhase.HALFTIME && (
+                <HalftimeScreen
+                    gameState={engine.gameState}
+                    onStartSecondHalf={engine.startSecondHalf}
                 />
             )}
 

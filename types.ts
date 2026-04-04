@@ -38,6 +38,7 @@ export enum GamePhase {
   MAIN_MENU = 'MAIN_MENU',
   TEAM_SELECT = 'TEAM_SELECT',
   PLAYING = 'PLAYING',
+  HALFTIME = 'HALFTIME',
   POST_GAME = 'POST_GAME'
 }
 
@@ -100,6 +101,9 @@ export interface TeamData {
 export interface GameState {
   phase: GamePhase;
   turn: number;
+  half: 1 | 2;
+  turnsPerHalf: number;
+  kickingTeam: TeamSide;       // Which team kicks off (receives in other half)
   currentTeam: TeamSide;
   homeTeam: TeamData;
   awayTeam: TeamData;

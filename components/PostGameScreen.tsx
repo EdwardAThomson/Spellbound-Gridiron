@@ -50,7 +50,7 @@ export default function PostGameScreen({ gameState, onRematch, onMainMenu }: Pos
             <div className="relative z-10 flex flex-col items-center gap-6 px-8 max-w-2xl w-full">
                 {/* Result Banner */}
                 <div className="text-center">
-                    <p className="text-sm text-stone-500 uppercase tracking-widest mb-2">Match Complete</p>
+                    <p className="text-sm text-stone-500 uppercase tracking-widest mb-2">Full Time</p>
                     {tied ? (
                         <h1 className="text-4xl font-fantasy text-amber-200 uppercase">Draw!</h1>
                     ) : (
