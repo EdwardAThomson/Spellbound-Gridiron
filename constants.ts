@@ -58,8 +58,8 @@ export const TEAM_BLUEPRINTS: TeamBlueprint[] = [
     description: 'Short but immovable. An armored wall with a berserker ready to erupt.',
   },
   {
-    id: 'skaven-swarm',
-    name: 'Skaven Swarm',
+    id: 'ratfolk-swarm',
+    name: 'Ratfolk Swarm',
     race: 'Ratfolk',
     color: 'green',
     roster: [PlayerRole.CATCHER, PlayerRole.CATCHER, PlayerRole.ASSASSIN, PlayerRole.BLITZER, PlayerRole.QUARTERBACK],

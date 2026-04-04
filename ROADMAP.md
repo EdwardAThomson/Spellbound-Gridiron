@@ -77,7 +77,7 @@ All 8 teams implemented with unique roster compositions:
 | Orc Bashers          | Dark Orcs     | 2x Lineman, 2x Blitzer, QB                     |
 | Undead Legion        | Undead        | 3x Lineman, Blitzer, Wizard                    |
 | Dwarven Ironwall     | Dwarves       | 3x Lineman, Blitzer, QB                        |
-| Skaven Swarm         | Ratfolk       | 3x Catcher, Blitzer, QB                        |
+| Ratfolk Swarm         | Ratfolk       | 3x Catcher, Blitzer, QB                        |
 | Demon Hellfire       | Demons        | 2x Wizard, Blitzer, Lineman, QB                |
 | Human Crusaders      | Humans        | Lineman, Blitzer, QB, Catcher, Wizard           |
 | Lizardfolk Predators | Lizardfolk    | 2x Lineman, 2x Blitzer, Catcher                |
@@ -210,7 +210,7 @@ The flagship long-term feature. A single-player campaign with progression.
 | Ironhammer Hold   | Dwarven Ironwall     | Mud                | Medium     |
 | Bone Hollow       | Undead Legion        | Ice                | Medium     |
 | Scorchpeak Caldera| Demon Hellfire       | Lava               | Hard       |
-| Ratburrow Warrens | Skaven Swarm         | Maze (exotic)      | Hard       |
+| Ratburrow Warrens | Ratfolk Swarm         | Maze (exotic)      | Hard       |
 | Kingsbridge       | Human Crusaders      | Grass              | Medium     |
 | Blackfang Kraal   | Orc Bashers          | Mud                | Medium     |
 | Sunscale Marsh    | Lizardfolk Predators | Grass              | Easy       |
