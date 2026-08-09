@@ -5,6 +5,10 @@ A fantasy football strategy game powered by AI.
 
 ![Screenshot](Screenshot_20251218.png)
 
+## YouTube Videos
+
+- [Getting started!](https://www.youtube.com/watch?v=pgtWZjtKIuA&t=1s)
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
