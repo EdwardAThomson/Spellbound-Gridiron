@@ -1,13 +1,15 @@
 
 # Spellbound Gridiron
 
-A fantasy football strategy game powered by AI.
+A fantasy football strategy game powered by AI. Broadly inspired by Blood Bowl: two teams of five (Linemen, Blitzers, Catchers, a Quarterback, and a spell-slinging Wizard) battle across a 12x18 grid, tackling, passing, and casting spells to carry the ball into the opposing endzone.
+
+The AI angle is a dual-engine setup: one LLM provides live match commentary and team names, while a second powers an in-game assistant chatbot (Coach "Iron-Gut" Ironfist) for rules help and tactical advice. Both engines can run on cloud APIs (OpenAI, Gemini, Claude) or on local CLI tools via a small backend server.
 
 ![Screenshot](Screenshot_20251218.png)
 
 ## YouTube Videos
 
-- [Getting started!](https://www.youtube.com/watch?v=pgtWZjtKIuA&t=1s)
+- [Getting started!](https://www.youtube.com/watch?v=pgtWZjtKIuA&t=1s) : a quick tour of the game and how to set it up.
 
 ## Run Locally
 
