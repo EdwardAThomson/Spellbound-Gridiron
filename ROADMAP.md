@@ -24,16 +24,16 @@ All six resolved in Task 1 (2026-08-10).
 
 ## Player development
 
-- [ ] **XP and progression.** Players earn experience from match events (tackles, completions, touchdowns).
+- [x] **XP and progression.** Done (2026-08-10): players earn XP from tackles, completions, spell casts, and touchdowns (`XP_AWARDS` in `services/rules.ts`); XP and level show on the unit card and survive save/load.
 - [ ] **Skill unlocks.** New skills purchasable / rolled on level-up. Skill catalog needed.
-- [ ] **Stat modifiers.** Permanent stat bumps on level-up (capped per role).
+- [x] **Stat modifiers.** Done (2026-08-10): level-ups grant a stat bump from the role's growth list, capped at `MAX_STAT_BUMP` above base (`applyLevelBump` in `services/rules.ts`).
 - [ ] **Injuries / persistence.** Carry injury state across matches (required for campaign play).
 
 ## Campaign mode
 
 - [ ] **League mode.** Multi-match season with standings, scheduled fixtures, and a league table.
 - [ ] **Tournament mode.** Bracketed knockout play.
-- [ ] **Persistent rosters.** Save/load team state between matches (depends on player progression).
+- [x] **Persistent rosters.** Done (2026-08-10): finished rosters (XP, levels, stat bumps) persist to localStorage (`services/roster.ts`) and the post-game Rematch button fields the same veterans; corrupt or missing data falls back to fresh teams.
 - [ ] **Player trading / transfers.** Move players between teams (campaign-only; needs persistence first).
 
 ## World

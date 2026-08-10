@@ -37,6 +37,8 @@ export {
   weatherPassModifier,
   weatherMovePenalty,
   effectiveMove,
+  kickoffPosition,
+  FORMATION_X,
   WIN_SCORE,
   MAX_TURNS,
   LAVA_HAZARD_COUNT,
@@ -46,8 +48,12 @@ export {
   MAX_STAT_BUMP,
   ROLE_GROWTH,
   levelForXp,
+  extractRoster,
+  applyRoster,
+  isRoster,
+  ROSTER_VERSION,
 } from "./rules";
-export type { StepEffect, MeteorResolution, XpAward } from "./rules";
+export type { StepEffect, MeteorResolution, XpAward, Roster, RosterPlayer } from "./rules";
 
 /** Manhattan distance (kept under its historical name for existing callers). */
 export const getDistance = manhattanDistance;

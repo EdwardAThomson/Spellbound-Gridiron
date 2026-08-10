@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, awardXp, XP_AWARDS, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, awardXp, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -17,6 +17,7 @@ import { ApiKeysContext } from './context/ApiKeysContext';
 import { LLMProvider } from './utils/llmHelper';
 import { DEFAULT_MODELS } from './constants/models';
 import { saveGame, loadGame } from './services/saveGame';
+import { saveRosters, loadRosters } from './services/roster';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -88,26 +89,34 @@ export default function App() {
     const [showSpellMenu, setShowSpellMenu] = useState(false);
 
     // --- Helpers ---
-    const setupTeam = (side: TeamSide, startY: number, direction: number, weather: Weather) => {
-        const players: Player[] = [];
-        // Formation: 5v5
+    // Build a team's 5v5 formation. An optional `roster` overlays carried
+    // progression (XP, level, bumped stats) onto the fresh players before their
+    // opening Move is computed, so a rematch fields last match's veterans with
+    // their earned stats intact.
+    const setupTeam = (side: TeamSide, weather: Weather = Weather.CLEAR, roster?: Roster) => {
+        // Formation: 5v5, slots from the shared deterministic kickoff layout.
         const roles = [PlayerRole.LINEMAN, PlayerRole.BLITZER, PlayerRole.QUARTERBACK, PlayerRole.CATCHER, PlayerRole.WIZARD];
-        const xPos = [2, 4, 6, 8, 10]; // Spread out
 
-        roles.forEach((role, index) => {
-            const player = createPlayer(
+        let players: Player[] = roles.map((role, index) => {
+            const slot = kickoffPosition(side, index, role);
+            return createPlayer(
                 `${side}-${index}`,
                 `${role} ${index + 1}`,
                 role,
                 side,
-                xPos[index],
-                startY + (direction * (role === PlayerRole.LINEMAN ? 2 : 0)) // Stagger formation slightly
+                slot.x,
+                slot.y
             );
-            // Apply the weather's Move penalty to the opening turn (Blizzard -1).
-            player.movesRemaining = effectiveMove(player.stats.move, weather);
-            players.push(player);
         });
-        return players;
+
+        if (roster) players = applyRoster(roster, players);
+
+        // Apply the weather's Move penalty to the opening turn (Blizzard -1),
+        // off each player's (possibly roster-bumped) base Move.
+        return players.map(player => ({
+            ...player,
+            movesRemaining: effectiveMove(player.stats.move, weather),
+        }));
     };
 
     // Terrain and weather are chosen on the start screen before the match begins.
@@ -139,13 +148,13 @@ export default function App() {
                 ...prev.homeTeam,
                 name: 'Elven Vanguard',
                 race: 'High Elves',
-                players: setupTeam(TeamSide.HOME, 1, 1, prev.weather)
+                players: setupTeam(TeamSide.HOME, prev.weather)
             },
             awayTeam: {
                 ...prev.awayTeam,
                 name: 'Orc Bashers',
                 race: 'Dark Orcs',
-                players: setupTeam(TeamSide.AWAY, 16, -1, prev.weather)
+                players: setupTeam(TeamSide.AWAY, prev.weather)
             },
             gameLog: ["The mystical gates open! The match begins.", ...prev.gameLog]
         }));
@@ -192,8 +201,31 @@ export default function App() {
     const gameStateRef = useRef(gameState);
     useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
+    // When a match ends, persist both teams' rosters (their carried XP, levels
+    // and stat bumps) to the named roster slots, so the post-game Rematch button
+    // can field the same veterans next match.
+    useEffect(() => {
+        if (gameState.isGameOver) {
+            saveRosters({
+                home: extractRoster(gameStateRef.current.homeTeam),
+                away: extractRoster(gameStateRef.current.awayTeam),
+            });
+        }
+    }, [gameState.isGameOver]);
+
     const pendingLogsRef = useRef<string[]>([]);
     const commentaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // The post-touchdown kickoff reset is delayed for dramatic effect; it must
+    // be cancelled whenever a new match starts (rematch / new game / load), or
+    // the stale timer fires into the fresh match and scatters its formation.
+    const kickoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const cancelPendingKickoff = () => {
+        if (kickoffTimerRef.current) {
+            clearTimeout(kickoffTimerRef.current);
+            kickoffTimerRef.current = null;
+        }
+    };
 
     const addLog = (msg: string) => {
         setGameState(prev => ({
@@ -511,16 +543,19 @@ export default function App() {
     };
 
     const handleTouchdown = () => {
-        setTimeout(() => {
+        cancelPendingKickoff();
+        kickoffTimerRef.current = setTimeout(() => {
+            kickoffTimerRef.current = null;
             setGameState(prev => {
-                const home = prev.homeTeam.players.map(p => ({ ...p, hasBall: false, position: { x: p.position.x, y: 1 + Math.floor(Math.random() * 3) } }));
-                const away = prev.awayTeam.players.map(p => ({ ...p, hasBall: false, position: { x: p.position.x, y: 16 - Math.floor(Math.random() * 3) } }));
-
+                // Deterministic kickoff: every player returns to its formation
+                // slot (keeping stats, XP, mana and stun state).
+                const toFormation = (p: Player, index: number) =>
+                    ({ ...p, hasBall: false, position: kickoffPosition(p.team, index, p.role) });
                 return {
                     ...prev,
                     ballPosition: { x: 6, y: 9 },
-                    homeTeam: { ...prev.homeTeam, players: home },
-                    awayTeam: { ...prev.awayTeam, players: away },
+                    homeTeam: { ...prev.homeTeam, players: prev.homeTeam.players.map(toFormation) },
+                    awayTeam: { ...prev.awayTeam, players: prev.awayTeam.players.map(toFormation) },
                     gameLog: [...prev.gameLog, "Teams resetting for kickoff..."]
                 };
             });
@@ -644,16 +679,17 @@ export default function App() {
     };
 
     const handleNewGame = () => {
-        // Drop any queued commentary from the finished match.
+        // Drop any queued commentary and pending kickoff from the finished match.
         if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
         pendingLogsRef.current = [];
         setIsAiThinking(false);
 
         setGameState(prev => ({
             turn: 1,
             currentTeam: TeamSide.HOME,
-            homeTeam: { ...INITIAL_HOME_TEAM, players: setupTeam(TeamSide.HOME, 1, 1) },
-            awayTeam: { ...INITIAL_AWAY_TEAM, players: setupTeam(TeamSide.AWAY, 16, -1) },
+            homeTeam: { ...INITIAL_HOME_TEAM, players: setupTeam(TeamSide.HOME) },
+            awayTeam: { ...INITIAL_AWAY_TEAM, players: setupTeam(TeamSide.AWAY) },
             selectedPlayerId: null,
             ballPosition: { x: 6, y: 9 },
             boardWidth: BOARD_WIDTH,
@@ -664,6 +700,53 @@ export default function App() {
             meteor: seedMeteor(prev.weather),
             gameLog: ["A new match begins! The mystical gates open once more."],
             commentary: "Welcome back to Spellbound Gridiron!",
+            isGameOver: false,
+            winner: null,
+        }));
+        cancelTargeting();
+    };
+
+    // Post-game rematch: field a fresh match reusing the persisted rosters so the
+    // two teams carry their earned XP, levels and stat bumps into the next game.
+    // Missing or corrupt roster data degrades gracefully to brand-new teams.
+    const handleRematch = () => {
+        // Drop any queued commentary and pending kickoff from the finished match.
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+
+        const loaded = loadRosters();
+        const homeRoster = loaded.ok ? loaded.slots!.home : undefined;
+        const awayRoster = loaded.ok ? loaded.slots!.away : undefined;
+
+        setGameState(prev => ({
+            turn: 1,
+            currentTeam: TeamSide.HOME,
+            homeTeam: {
+                ...INITIAL_HOME_TEAM,
+                name: homeRoster?.name ?? INITIAL_HOME_TEAM.name,
+                race: homeRoster?.race ?? INITIAL_HOME_TEAM.race,
+                players: setupTeam(TeamSide.HOME, prev.weather, homeRoster),
+            },
+            awayTeam: {
+                ...INITIAL_AWAY_TEAM,
+                name: awayRoster?.name ?? INITIAL_AWAY_TEAM.name,
+                race: awayRoster?.race ?? INITIAL_AWAY_TEAM.race,
+                players: setupTeam(TeamSide.AWAY, prev.weather, awayRoster),
+            },
+            selectedPlayerId: null,
+            ballPosition: { x: 6, y: 9 },
+            boardWidth: BOARD_WIDTH,
+            boardHeight: BOARD_HEIGHT,
+            terrain: prev.terrain,
+            weather: prev.weather,
+            hazards: seedHazards(prev.terrain),
+            meteor: seedMeteor(prev.weather),
+            gameLog: [homeRoster
+                ? 'Rematch! The veterans return, XP and hard-won stats intact.'
+                : 'Rematch! No saved rosters found - fresh teams take the field.'],
+            commentary: 'Rematch time! Same rivals, new grudge.',
             isGameOver: false,
             winner: null,
         }));
@@ -692,8 +775,9 @@ export default function App() {
             return;
         }
 
-        // Drop any queued commentary tied to the outgoing match.
+        // Drop any queued commentary and pending kickoff tied to the outgoing match.
         if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
         pendingLogsRef.current = [];
         setIsAiThinking(false);
 
@@ -1032,12 +1116,22 @@ export default function App() {
                                 <span className="text-gray-600 text-base mx-3">VS</span>
                                 <span className="text-red-400">{gameState.awayTeam.score}</span>
                             </p>
-                            <button
-                                onClick={handleNewGame}
-                                className="px-12 py-5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
-                            >
-                                New Game
-                            </button>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                <button
+                                    onClick={handleRematch}
+                                    title="Replay with the same teams - they keep the XP and levels they earned"
+                                    className="px-12 py-5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
+                                >
+                                    Rematch
+                                </button>
+                                <button
+                                    onClick={handleNewGame}
+                                    title="Start over with fresh teams (progression reset)"
+                                    className="px-12 py-5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
+                                >
+                                    New Game
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

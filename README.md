@@ -79,6 +79,13 @@ Players grow across a match. Every play banks XP, and enough XP levels a unit up
 -   **Level thresholds** (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.
 -   Progression is saved and restored with the match (the save format is versioned; saves from older versions are rejected rather than loaded).
 
+### Persistent Rosters & Rematch
+
+Teams persist between matches. When a match ends, both rosters (every player's XP, level and earned stat bumps) are written to versioned, named localStorage slots, separately from the single-match Save/Load slot. The post-game screen then offers two choices:
+
+-   **Rematch**: replays with the same two teams, reusing the saved rosters, so your veterans return at their formation slots carrying the XP and levels they earned. Corrupt or missing roster data falls back gracefully to fresh teams.
+-   **New Game**: starts over with brand-new teams (progression reset).
+
 ## Features
 
 ### 🤖 AI Assistant (chatbot)

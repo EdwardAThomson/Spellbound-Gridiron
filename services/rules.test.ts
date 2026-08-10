@@ -30,6 +30,7 @@ import {
   WIN_SCORE,
   MAX_TURNS,
 } from './rules';
+import { kickoffPosition, FORMATION_X } from './rules';
 import { Player, PlayerRole, TeamSide, TerrainType, Weather } from '../types';
 import { ROLE_STATS } from '../constants';
 
@@ -406,6 +407,23 @@ describe('awardXp', () => {
   it('respects the documented award ordering (touchdown is worth the most)', () => {
     expect(XP_AWARDS.TOUCHDOWN).toBeGreaterThan(XP_AWARDS.TACKLE);
     expect(ROLE_GROWTH[PlayerRole.CATCHER]).toContain('skill');
+  });
+});
+
+describe('kickoffPosition', () => {
+  it('places each formation slot deterministically, linemen staggered forward', () => {
+    // HOME line is row 1; the Lineman (slot 0) stands two rows ahead at y=3.
+    expect(kickoffPosition(TeamSide.HOME, 0, PlayerRole.LINEMAN)).toEqual({ x: 2, y: 3 });
+    expect(kickoffPosition(TeamSide.HOME, 3, PlayerRole.CATCHER)).toEqual({ x: 8, y: 1 });
+    // AWAY mirrors: line row 16, Lineman vanguard at y=14.
+    expect(kickoffPosition(TeamSide.AWAY, 0, PlayerRole.LINEMAN)).toEqual({ x: 2, y: 14 });
+    expect(kickoffPosition(TeamSide.AWAY, 4, PlayerRole.WIZARD)).toEqual({ x: 10, y: 16 });
+  });
+
+  it('covers every slot with a distinct on-board column', () => {
+    const xs = FORMATION_X.map((_, i) => kickoffPosition(TeamSide.HOME, i, PlayerRole.BLITZER).x);
+    expect(new Set(xs).size).toBe(FORMATION_X.length);
+    xs.forEach((x) => expect(x).toBeGreaterThan(0));
   });
 });
 

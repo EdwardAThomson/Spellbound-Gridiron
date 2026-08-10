@@ -1,5 +1,5 @@
 import {
-  Position, Player, PlayerRole, PlayerStats, TeamSide, TerrainType, Weather, MeteorWarning,
+  Position, Player, PlayerRole, PlayerStats, TeamSide, TeamData, TerrainType, Weather, MeteorWarning,
   BOARD_WIDTH, BOARD_HEIGHT,
 } from '../types';
 import { ROLE_STATS } from '../constants';
@@ -110,6 +110,25 @@ export const scatterPosition = (pos: Position, rng: Rng): Position => {
     x: Math.max(1, Math.min(BOARD_WIDTH - 2, scatterX)),
     y: Math.max(1, Math.min(BOARD_HEIGHT - 2, scatterY)),
   };
+};
+
+// --- Kickoff formation -----------------------------------------------------
+//
+// Deterministic formation slots, shared by initial setup and every kickoff
+// reset (post-touchdown and rematch). Index is the player's position in its
+// team array; Linemen stand two rows ahead of their line as a vanguard.
+
+export const FORMATION_X = [2, 4, 6, 8, 10];
+
+export const kickoffPosition = (
+  side: TeamSide,
+  index: number,
+  role: PlayerRole
+): Position => {
+  const home = side === TeamSide.HOME;
+  const startY = home ? 1 : BOARD_HEIGHT - 2;
+  const stagger = role === PlayerRole.LINEMAN ? (home ? 2 : -2) : 0;
+  return { x: FORMATION_X[index % FORMATION_X.length], y: startY + stagger };
 };
 
 // --- Win condition ---------------------------------------------------------
@@ -466,3 +485,98 @@ export const advanceMeteor = (
   strike: current ? current.target : null,
   next: chooseMeteorTarget(upcomingTurn, rng),
 });
+
+// --- Persistent rosters ----------------------------------------------------
+//
+// A roster is a team's *durable* progression, distilled out of a live
+// `TeamData` so it can outlive a single match. It keeps only what should carry
+// forward - the team's identity plus each player's earned XP, level and
+// (bumped) stats - and drops everything that is match-specific (board position,
+// ball possession, stun, moves remaining, selection). A rematch rebuilds fresh
+// players at their formation slots and then overlays the roster back on top, so
+// veterans return with the XP and stat bumps they earned last time.
+//
+// These functions are pure (no storage, no rng); `services/roster.ts` wraps
+// them in a versioned localStorage slot, mirroring the save/load system.
+
+/** Bump when the persisted roster shape changes; old roster blobs are rejected. */
+export const ROSTER_VERSION = 1;
+
+/** One player's durable progression within a roster slot. */
+export interface RosterPlayer {
+  id: string;
+  name: string;
+  role: PlayerRole;
+  xp: number;
+  level: number;
+  stats: PlayerStats;
+}
+
+/** A named team slot: its identity plus every player's carried progression. */
+export interface Roster {
+  name: string;
+  race: string;
+  color: string;
+  players: RosterPlayer[];
+}
+
+/** Distil a live team down to the roster progression that carries across matches. */
+export const extractRoster = (team: TeamData): Roster => ({
+  name: team.name,
+  race: team.race,
+  color: team.color,
+  players: team.players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    xp: p.xp,
+    level: p.level,
+    stats: { ...p.stats },
+  })),
+});
+
+const isRosterPlayer = (v: any): v is RosterPlayer =>
+  Boolean(
+    v &&
+      typeof v.id === 'string' &&
+      typeof v.name === 'string' &&
+      Object.values(PlayerRole).includes(v.role) &&
+      typeof v.xp === 'number' &&
+      typeof v.level === 'number' &&
+      v.stats &&
+      typeof v.stats.move === 'number' &&
+      typeof v.stats.strength === 'number' &&
+      typeof v.stats.skill === 'number' &&
+      typeof v.stats.armor === 'number'
+  );
+
+/** Structural guard so a corrupt/hand-edited roster degrades to "no roster". */
+export const isRoster = (v: any): v is Roster =>
+  Boolean(
+    v &&
+      typeof v.name === 'string' &&
+      typeof v.race === 'string' &&
+      typeof v.color === 'string' &&
+      Array.isArray(v.players) &&
+      v.players.every(isRosterPlayer)
+  );
+
+/**
+ * Overlay a roster's carried progression onto a set of freshly-created match
+ * players, matched by player id. Fresh, match-specific fields (position, mana,
+ * moves, stun, ball) are kept; name, XP, level and stats are restored from the
+ * roster. A fresh player with no matching roster entry is returned unchanged, so
+ * a partial or reshaped roster still yields a fully playable team.
+ */
+export const applyRoster = (roster: Roster, freshPlayers: Player[]): Player[] =>
+  freshPlayers.map((p) => {
+    const saved = roster.players.find((r) => r.id === p.id);
+    if (!saved) return p;
+    return {
+      ...p,
+      name: saved.name,
+      xp: saved.xp,
+      level: saved.level,
+      stats: { ...saved.stats },
+    };
+  });
