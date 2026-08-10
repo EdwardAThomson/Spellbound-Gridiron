@@ -1,39 +1,51 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_10968a13b003
-  generated_at: 2026-08-10T02:00:58Z
+  run_id: r_df5df1c84aa4
+  generated_at: 2026-08-10T14:18:25Z
   regenerable: true
 ---
 
 # Assumptions
 
-### Exact XP values per event (tackle/pass/touchdown/spell), level thresholds, and per-role stat caps are unspecified.
+### Exact file names/locations for the new specs and services that acceptance commands reference
 
-- choice: The builder picks sensible fixed values (e.g. modest per-event XP, a small number of thresholds, caps a few points above starting ROLE_STATS) and documents them in README/GAME_RULES/RuleBookModal/CLAUDE.md.
-- rejected: Making the values operator-configurable or asking for confirmation before implementing.
+- choice: Use e2e/menu.spec.ts, e2e/help.spec.ts, e2e/tutorial.spec.ts, e2e/campaign.spec.ts, services/campaign.ts + services/campaign.test.ts, services/tutorial.ts + services/tutorial.test.ts, and a HelpModal in components/
+- rejected: Embedding tutorial/campaign logic inside existing files (App.tsx/rules.ts) and folding new e2e assertions into the existing smoke spec
 - reversal_cost: cheap
 
-### Whether Task 4 (league mode) should be a hard acceptance criterion.
+### Whether Help replaces or sits alongside the existing Game Rules button
 
-- choice: Treat league as conditional scope, not a gated acceptance criterion, since the prompt says to skip it entirely unless Tasks 1-3 are complete and it can be finished genuinely; a finished Tasks 1-3 is explicitly the better outcome.
-- rejected: Adding league fixtures/standings/simulation as required acceptance commands, which would fail a run that correctly skips Task 4.
-- reversal_cost: moderate
-
-### Exact literal wording used to describe the Blizzard move penalty in docs.
-
-- choice: Require the literal phrase '-1 Move' (case-insensitive) to appear alongside Blizzard in README, GAME_RULES, and RuleBookModal so agreement is machine-checkable.
-- rejected: Accepting any paraphrase (e.g. 'reduces movement by one'), which cannot be reliably verified by command.
+- choice: Provide a single always-available Help entry that supersedes the Game Rules button, with Controls and How-to-play sections (How-to-play reusing GAME_RULES)
+- rejected: Keeping a separate Game Rules button in addition to a new Help entry
 - reversal_cost: cheap
 
-### How old/corrupt saves and rosters should be handled on schema bump.
+### How the campaign is persisted and keyed in localStorage
 
-- choice: Degrade gracefully: migrate when feasible, otherwise reject the old save and roster to fresh state with a user-visible message, never crashing.
-- rejected: Silently discarding incompatible data, or hard-failing/throwing on load.
+- choice: Store campaign state under its own versioned key (e.g. spellbound_campaign_v1), separate from match saves and rosters, with a version field and corrupt/missing-data fallback to a clean state
+- rejected: Reusing the existing save-game key/namespace for campaign state
 - reversal_cost: moderate
 
-### Whether new flows (XP accrual, rematch) require e2e coverage or unit coverage suffices.
+### The AI-vs-AI match simulator's scoring model
 
-- choice: Require both: pure logic unit-tested in services/rules.ts and the user-visible flows covered by Playwright specs, per the prompt's explicit e2e asks.
-- rejected: Unit-only coverage, leaving the visible UI/persistence flows unverified end-to-end.
+- choice: Deterministic, rng-injected function mapping team quality (aggregate levels/stats) plus injected rolls to a plausible score; same rng always yields the same result
+- rejected: Purely random scores independent of team quality, or an LLM-generated score
+- reversal_cost: moderate
+
+### Fixture structure for a 4-team double round-robin
+
+- choice: 6 rounds, 12 total fixtures (each pair plays twice, home/away), standings scored 3-1-0
+- rejected: Single round-robin (6 fixtures) or an unbalanced schedule
+- reversal_cost: moderate
+
+### How the tutorial board/scenario is set up
+
+- choice: A fixed scripted Grass/Clear scenario driven by the data-driven step list, running with no API keys and isolated from real saves/rosters
+- rejected: Reusing a normal randomized Quick Play match as the tutorial surface
+- reversal_cost: moderate
+
+### How the menu is re-reachable from a running/finished match
+
+- choice: Expose a quit-to-menu control during play plus a return-to-menu action on the game-over screen, both without a page reload and preserving save integrity
+- rejected: Only offering return-to-menu on the game-over screen (no mid-match quit)
 - reversal_cost: cheap

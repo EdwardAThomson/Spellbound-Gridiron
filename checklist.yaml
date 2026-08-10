@@ -1,63 +1,127 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_10968a13b003
-  generated_at: 2026-08-10T02:00:58Z
+  run_id: r_df5df1c84aa4
+  generated_at: 2026-08-10T14:18:25Z
   regenerable: false
 ---
 
 mode: closed
 items:
-  - id: i_50727e35c8f6
-    statement: "Task 1: give Blizzard a -1 Move penalty for all players (in addition to +2 pass difficulty) in the pure rules layer, unit-test it, and make GAME_RULES, RuleBookModal, README (and CLAUDE.md) all describe Blizzard as -1 Move and +2 pass difficulty."
+  - id: i_2f78d838f790
+    statement: "Add pure, rng-injected campaign logic in services/campaign.ts: a 4-team double round-robin fixture generator, 3-1-0 standings computation, a non-LLM rules-based match simulator that derives a deterministic score from team quality for a fixed rng, and versioned localStorage serialize/deserialize helpers that degrade gracefully on corrupt or missing data; add services/campaign.test.ts asserting the fixture set is non-empty and correctly sized (12 fixtures for 4 teams), the simulator returns a deterministic score for a fixed rng, and corrupt input degrades rather than throws."
     kind: build
     owner: agent
     bears_on: ""
     deps: []
-    scope: ["services/rules.ts", "services/rules.test.ts", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md"]
+    parallel: true
+    scope: ["services/campaign.ts", "services/campaign.test.ts"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'blizzard' services/rules.ts && grep -iqE 'blizzard.*move|move.*blizzard' services/rules.test.ts && npm test"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iqE 'blizzard.*move|move.*blizzard' services/rules.test.ts"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/campaign.test.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/campaign.test.ts"
         assertion_regex: "([0-9]+) passed"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iq blizzard README.md && grep -iq -- '-1 move' README.md && grep -iq -- '-1 move' utils/contextSerializer.ts && grep -Riq -- '-1 move' components/"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iq -- '-1 move' README.md"
-  - id: i_44bfa1390456
-    statement: "Task 2: add an XP-and-progression system (documented XP awards from tackles/passes/touchdowns/spell casts, level thresholds, role-capped stat bumps) as rng-injected pure logic in services/rules.ts with unit tests; put XP/level in GameState and survive the versioned save/load round trip (bump SAVE_VERSION, migrate or gracefully reject old saves) with unit tests; show XP/level on the left-panel unit card; add an e2e spec asserting XP visibly accrues after a scoring play."
+  - id: i_4c8831bed4af
+    statement: "Add a data-driven tutorial step list in services/tutorial.ts: an ordered, non-empty list of coachmark steps where each carries an anchor, plain-language text, and a completion condition; add services/tutorial.test.ts asserting the list is non-empty, ordered, and every step is well-formed (has anchor, text, and completion condition)."
     kind: build
     owner: agent
     bears_on: ""
-    deps: ["i_50727e35c8f6"]
-    dep_reasons:
-      - depends_on: "i_50727e35c8f6"
-        reason: "Edits the same files (services/rules.ts, services/rules.test.ts, utils/contextSerializer.ts, README.md, CLAUDE.md); its diff must apply after Task 1's Blizzard edits to those files."
-    scope: ["services/rules.ts", "services/rules.test.ts", "services/saveGame.ts", "services/saveGame.test.ts", "types.ts", "App.tsx", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md", "e2e/"]
+    deps: []
+    parallel: true
+    scope: ["services/tutorial.ts", "services/tutorial.test.ts"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -iqE 'level|xp' services/rules.test.ts && npm test"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iqE 'xp|experience' services/rules.ts"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/tutorial.test.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/tutorial.test.ts"
         assertion_regex: "([0-9]+) passed"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' services/*.test.ts && grep -RiqE 'load|save|migrat|version' services/*.test.ts && npm test"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'xp|level' services/*.test.ts"
-        assertion_regex: "([0-9]+) passed"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' e2e/ && npm run test:e2e"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'xp|level' e2e/"
-        assertion_regex: "([0-9]+) passed"
-  - id: i_5f57dbdcef8b
-    statement: "Task 3: add named-slot persistent rosters that carry teams (players with XP/levels/bumps) across matches via localStorage alongside the existing save system, with a post-game rematch flow reusing persisted rosters and graceful degradation to fresh teams on corrupt/missing data; cover roster round-trip fidelity with unit tests and the rematch flow with an e2e spec; update all rule docs, then confirm the full CI gate is green."
+  - id: i_f61ea6a771dd
+    statement: "Document the new Main-menu, Campaign, and Tutorial modes in README.md and CLAUDE.md, and sync any mode/control wording into GAME_RULES (utils/contextSerializer.ts) so gameplay docs do not drift."
     kind: build
     owner: agent
     bears_on: ""
-    deps: ["i_44bfa1390456"]
-    dep_reasons:
-      - depends_on: "i_44bfa1390456"
-        reason: "Rosters carry the XP/levels/stat-bumps defined by Task 2, and it edits the same files (services/rules.ts, services/saveGame.ts, types.ts, App.tsx, e2e/); its diff must apply after Task 2's commit."
-    scope: ["services/rules.ts", "services/rules.test.ts", "services/saveGame.ts", "services/saveGame.test.ts", "types.ts", "App.tsx", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md", "e2e/"]
+    deps: []
+    parallel: true
+    scope: ["README.md", "CLAUDE.md", "utils/contextSerializer.ts"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'roster' services/rules.ts && grep -RiqE 'roster|slot' services/*.test.ts && npm test"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'roster' services/rules.ts"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q Campaign README.md && grep -q Tutorial README.md && grep -qi menu README.md"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! ( grep -q Campaign README.md && grep -q Tutorial README.md && grep -qi menu README.md )"
+  - id: i_04515ee5757d
+    statement: "Replace the start overlay with a fantasy-styled main-menu home screen offering exactly Quick Play, Campaign, Tutorial, and Settings; fully wire Quick Play (to the existing terrain/weather+match flow) and Settings (existing modal); add a quit-to-menu control and a menu return from the game-over screen, both without a page reload and without corrupting a running match's save; add e2e/menu.spec.ts (drive the menu, start Quick Play, return to menu in-game) and update the existing e2e specs to navigate via the new menu."
+    kind: build
+    owner: agent
+    bears_on: ""
+    deps: []
+    scope: ["App.tsx", "components/", "e2e/"]
+    verify:
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/menu.spec.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/menu.spec.ts"
         assertion_regex: "([0-9]+) passed"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Riq 'rematch' e2e/ && npm run test:e2e"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -Riq 'rematch' e2e/"
+  - id: i_5b0e08f9f0ea
+    statement: "Add an always-available in-game Help entry with two clearly separated sections, Controls (unit selection, click-to-move, tackle, pass/spell targeting, End Action/End Turn, Save/Load, Rematch) and How-to-play (objective, turn structure, stats, terrain/weather, spells, XP/levels, win condition), reusing GAME_RULES as the single source of truth rather than duplicating rule text; add e2e/help.spec.ts asserting both sections appear."
+    kind: build
+    owner: agent
+    bears_on: ""
+    deps: ["i_04515ee5757d"]
+    dep_reasons:
+      - depends_on: "i_04515ee5757d"
+        reason: "The Help e2e opens Help from the new main-menu-driven in-game UI and shares App.tsx wiring; the menu must exist and be committed first."
+    scope: ["App.tsx", "components/", "e2e/help.spec.ts"]
+    verify:
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rlq GAME_RULES components/"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rlq GAME_RULES components/"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/help.spec.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/help.spec.ts"
         assertion_regex: "([0-9]+) passed"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -Riq 'rematch' e2e/ && grep -iq -- '-1 move' utils/contextSerializer.ts && npm run check"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iq -- '-1 move' utils/contextSerializer.ts"
+  - id: i_3b7e57cc7a04
+    statement: "Build the guided tutorial UI driven by the services/tutorial.ts step list: anchored coachmarks with short text and Next/Skip, each step waiting for the real action where practical and handling both dice outcomes gracefully, running on Grass/Clear with no API keys, launched from the menu, skippable at any time, and returning cleanly to the menu without touching saves or rosters; add e2e/tutorial.spec.ts driving the happy path to completion back to the menu."
+    kind: build
+    owner: agent
+    bears_on: ""
+    deps: ["i_4c8831bed4af", "i_04515ee5757d"]
+    dep_reasons:
+      - depends_on: "i_4c8831bed4af"
+        reason: "The tutorial UI imports the ordered step-list API from services/tutorial.ts, which item 1 creates; scopes share no file so this edge is declared explicitly."
+      - depends_on: "i_04515ee5757d"
+        reason: "The tutorial is launched from the new main menu and shares App.tsx wiring; the menu must exist and be committed first."
+    scope: ["App.tsx", "components/", "e2e/tutorial.spec.ts"]
+    verify:
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/tutorial.spec.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/tutorial.spec.ts"
+        assertion_regex: "([0-9]+) passed"
+  - id: i_5fca45517a8f
+    statement: "Build the campaign hub UI on top of services/campaign.ts: a standings table (played/won/drawn/lost/points, 3-1-0), upcoming fixture, and Continue/Play Next Match control; player fixtures play as normal matches; AI-vs-AI fixtures resolve instantly via the pure simulator; a season-complete screen crowning the champion with a new-season flow (rosters carry over via the existing roster system, standings reset); campaign state persists under its own versioned localStorage key, resumes from the Campaign menu entry, survives reload mid-season, and degrades on corrupt/missing data; add e2e/campaign.spec.ts entering Campaign from the menu, rendering the hub, advancing a fixture, and confirming persistence across a reload."
+    kind: build
+    owner: agent
+    bears_on: ""
+    deps: ["i_2f78d838f790", "i_04515ee5757d"]
+    dep_reasons:
+      - depends_on: "i_2f78d838f790"
+        reason: "The campaign UI imports the fixtures/standings/simulator/persistence API from services/campaign.ts, which item 0 creates; scopes share no file so this edge is declared explicitly."
+      - depends_on: "i_04515ee5757d"
+        reason: "Campaign is entered from the new main menu and shares App.tsx wiring; the menu must exist and be committed first."
+    scope: ["App.tsx", "components/", "e2e/campaign.spec.ts"]
+    verify:
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/campaign.spec.ts"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/campaign.spec.ts"
+        assertion_regex: "([0-9]+) passed"
+  - id: i_3ed2b7d722ab
+    statement: "Verify and, where needed, fix integration so the full CI gate is green with all four new e2e specs and both new unit tests present and wired in: npm run check (Vitest unit + Playwright e2e) passes end to end with no test calling a real LLM."
+    kind: build
+    owner: agent
+    bears_on: ""
+    deps: ["i_2f78d838f790", "i_4c8831bed4af", "i_04515ee5757d", "i_5b0e08f9f0ea", "i_3b7e57cc7a04", "i_5fca45517a8f"]
+    dep_reasons:
+      - depends_on: "i_2f78d838f790"
+        reason: "npm run check executes services/campaign.test.ts, which must exist and pass; item 0 creates it."
+      - depends_on: "i_4c8831bed4af"
+        reason: "npm run check executes services/tutorial.test.ts, which must exist and pass; item 1 creates it."
+      - depends_on: "i_04515ee5757d"
+        reason: "npm run check executes e2e/menu.spec.ts and the menu-updated existing specs; item 3 creates/updates them."
+      - depends_on: "i_5b0e08f9f0ea"
+        reason: "npm run check executes e2e/help.spec.ts; item 4 creates it."
+      - depends_on: "i_3b7e57cc7a04"
+        reason: "npm run check executes e2e/tutorial.spec.ts; item 5 creates it."
+      - depends_on: "i_5fca45517a8f"
+        reason: "npm run check executes e2e/campaign.spec.ts; item 6 creates it."
+    verify:
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f e2e/menu.spec.ts && test -f e2e/help.spec.ts && test -f e2e/tutorial.spec.ts && test -f e2e/campaign.spec.ts && test -f services/campaign.test.ts && test -f services/tutorial.test.ts && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! ( test -f e2e/menu.spec.ts && test -f e2e/help.spec.ts && test -f e2e/tutorial.spec.ts && test -f e2e/campaign.spec.ts && test -f services/campaign.test.ts && test -f services/tutorial.test.ts )"
         assertion_regex: "([0-9]+) passed"
