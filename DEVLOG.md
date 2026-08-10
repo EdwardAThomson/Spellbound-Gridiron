@@ -290,3 +290,11 @@ Verify passed (exit 0): `npx playwright test e2e/campaign.spec.ts`. Full `npm ru
 
 Note for next step: Campaign hub item complete and verified, all green. Worktree holds 6 changed files (+490 -24), left unstaged for the harness to commit.
 
+## 2026-08-10 — i_3ed2b7d722ab — Verify and, where needed, fix integration so the full CI gate is green with all four new e2e specs and both new unit tests present and wired in: npm run check (Vitest unit + Playwright e2e) passes end to end with no test calling a real LLM.
+
+Verify-only item confirmed green; no code changes required.
+
+npm run check passes end to end: Vitest 108/108 across 5 files (including campaign.test.ts and tutorial.test.ts) and Playwright 9/9 (including the four new specs campaign, help, menu, tutorial, plus the updated existing specs). Smoke runs with no API keys, so no test calls a real LLM.
+
+Worktree is intentionally unmodified (staged diff: 0 files); nothing needed fixing.
+
