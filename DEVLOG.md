@@ -326,3 +326,16 @@ new determinism tests).
 ---
 Note for next step: Item complete, all four verify checks green, worktree holds the change (+85 -4 across App.tsx, README.md, services/rules.ts, services/campaign.ts, services/campaign.test.ts). Only the unit layer ran; the e2e half of `npm run check` was not exercised this step. `seededRng`/`fixtureSeed`/`fixtureRng` are now the reproducible-simulation primitives for the next tasks (opponent brain, Quick Play/campaign wiring).
 
+## 2026-08-10 — i_8ef90cf2eae7 — Add a pure, rng-injected, LLM-free opponent turn planner (services/opponent.ts) that emits an ordered list of plain-data actions (move/tackle/pass/spell/pass-turn) covering the required heuristics with a hard action cap, plus seeded unit tests (services/opponent.test.ts) covering the required edge cases.
+
+Item i_8ef90cf2eae7: add a pure, rng-injected, LLM-free opponent turn planner with seeded unit tests.
+
+Adds two files in the services layer:
+
+- `services/opponent.ts` — `planOpponentTurn(state, rng, side)` returns an ordered `OpponentAction[]` (move/tackle/pass/spell/pass-turn) for one side's turn. Deterministic given the same state and seeded rng (rng only breaks ties between equally-ranked choices); no LLM, network, or vendor SDK. Plans against a lightweight working copy of the board, folding each action's deterministic effect back in before deciding the next. Covers the required heuristics: chase and pick up the loose ball, drive the carrier toward the attacking endzone (never its own), sensible forward passes when boxed in, favourable tackles plus always hitting the enemy carrier, Wizard mana use (Fireball, Revitalize, Blink), and hazard/meteor tile avoidance. Terminates via a per-unit bound and a hard `MAX_OPPONENT_ACTIONS` (64) cap, always ending in a single `pass-turn`.
+- `services/opponent.test.ts` — seeded unit tests via `seededRng`, covering terminating turns (no players, all stunned, boxed-in), loose-ball chase, carrier advance/pass, favourable and forced tackles, Wizard spells at full and zero mana, terrain avoidance, and determinism (same state + seed yields an identical plan).
+
+Verify: exit 0, all 3 checks passed. Planner exported with no LLM references (V1); required edge-case keywords present in tests (V2); unit suite green, 129/129 including 17 new opponent tests (V3).
+
+Note for the next step: item complete, both files are in the worktree ready for the harness commit; no git operations performed. For the wiring task (item 3): `planOpponentTurn(state, rng, side=state.currentTeam)` returns an ordered `OpponentAction[]` ending in one `pass-turn`, capped at `MAX_OPPONENT_ACTIONS` (64), each action carrying a `reason` string for the opponent-turn indicator. Action fields map to existing App handlers (`move.to`/`path`, `tackle.targetId`, `pass.to`/`targetId`, `spell.spell`/`target`); dice outcomes still resolve in those handlers. No type-check gate exists (Vite transpiles, `tsc` not in build), so vitest/esbuild is the practical check.
+
