@@ -59,6 +59,14 @@ export interface TeamData {
   score: number;
 }
 
+// A telegraphed incoming meteor (Meteor Shower weather). It is shown for one
+// round before it strikes `target` on `strikeTurn`, giving players a warning to
+// clear the tile. Persisted in save/load so a mid-shower match restores exactly.
+export interface MeteorWarning {
+  target: Position;
+  strikeTurn: number;
+}
+
 export interface GameState {
   turn: number;
   currentTeam: TeamSide;
@@ -70,6 +78,11 @@ export interface GameState {
   boardHeight: number;
   terrain: TerrainType;
   weather: Weather;
+  // Seeded lava hazard tiles (only populated on LAVA terrain). Stepping onto one
+  // knocks the mover down. Deterministic per match and persisted in save/load.
+  hazards: Position[];
+  // The currently telegraphed meteor (Meteor Shower weather), or null.
+  meteor: MeteorWarning | null;
   gameLog: string[];
   commentary: string;
   isGameOver: boolean;

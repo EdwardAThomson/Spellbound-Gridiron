@@ -14,10 +14,11 @@ import { GameState, TeamSide, TerrainType, Weather } from '../types';
 // Save action, so a running game never overwrites the slot on its own.
 
 /** Bump this whenever the persisted shape changes; old saves are then rejected. */
-export const SAVE_VERSION = 1;
+// v2 added terrain hazard tiles and the meteor telegraph to the snapshot.
+export const SAVE_VERSION = 2;
 
 /** The single localStorage key holding the save slot. */
-export const SAVE_KEY = 'spellbound_gridiron_save_v1';
+export const SAVE_KEY = 'spellbound_gridiron_save_v2';
 
 /** The persisted envelope: a version tag wrapping the full game snapshot. */
 export interface SaveEnvelope {
@@ -71,6 +72,12 @@ export const serializeSave = (
 const isPosition = (v: any): boolean =>
   v === null || (v && typeof v.x === 'number' && typeof v.y === 'number');
 
+const isConcretePosition = (v: any): boolean =>
+  v && typeof v.x === 'number' && typeof v.y === 'number';
+
+const isMeteor = (v: any): boolean =>
+  v === null || (v && isConcretePosition(v.target) && typeof v.strikeTurn === 'number');
+
 const isTeamData = (v: any): boolean =>
   v &&
   typeof v.name === 'string' &&
@@ -90,6 +97,9 @@ const isGameState = (v: any): v is GameState =>
   typeof v.boardHeight === 'number' &&
   Object.values(TerrainType).includes(v.terrain) &&
   Object.values(Weather).includes(v.weather) &&
+  Array.isArray(v.hazards) &&
+  v.hazards.every(isConcretePosition) &&
+  isMeteor(v.meteor) &&
   Array.isArray(v.gameLog) &&
   typeof v.commentary === 'string' &&
   typeof v.isGameOver === 'boolean' &&

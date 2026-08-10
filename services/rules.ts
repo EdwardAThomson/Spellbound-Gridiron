@@ -1,4 +1,7 @@
-import { Position, Player, TeamSide, BOARD_WIDTH, BOARD_HEIGHT } from '../types';
+import {
+  Position, Player, TeamSide, TerrainType, Weather, MeteorWarning,
+  BOARD_WIDTH, BOARD_HEIGHT,
+} from '../types';
 
 // Pure, deterministic game-rules logic extracted from App.tsx and gameUtils.ts.
 //
@@ -70,16 +73,18 @@ export interface PassResult {
 }
 
 /**
- * SKL + d6 vs `2 + manhattan_distance`; success on roll >= difficulty.
+ * SKL + d6 vs `2 + manhattan_distance + weatherMod`; success on roll >= difficulty.
  * The difficulty metric is Manhattan (grid) distance to match the rulebook
- * (`GAME_RULES` in utils/contextSerializer.ts) and CLAUDE.md.
+ * (`GAME_RULES` in utils/contextSerializer.ts) and CLAUDE.md. Bad weather
+ * (`weatherMod`, from `weatherPassModifier`) raises the difficulty on top of it.
  */
 export const resolvePass = (
   thrower: Player,
   targetPos: Position,
-  rng: Rng
+  rng: Rng,
+  weatherMod: number = 0
 ): PassResult => {
-  const difficulty = 2 + manhattanDistance(thrower.position, targetPos);
+  const difficulty = 2 + manhattanDistance(thrower.position, targetPos) + weatherMod;
   const roll = rollDie(rng, 6) + thrower.stats.skill;
   const success = roll >= difficulty;
   return {
@@ -188,3 +193,135 @@ export const validateSpellCast = (
       return { valid: true, reason: '' };
   }
 };
+
+// --- Terrain & weather -----------------------------------------------------
+//
+// Terrain and weather turn the four cosmetic pitch/sky types into real
+// mechanics. Everything here is pure and rng-injected so it stays testable:
+//
+// - Mud   (Orc Pits):    a completed step has a chance to slip, dropping the
+//                        mover prone (stunned) where they land.
+// - Lava  (Demon Forge): a fixed set of seeded hazard tiles knock down anyone
+//                        who steps onto them.
+// - Ice   (Frozen Wastes): a step slides one extra tile in the travel direction
+//                        when that tile is open.
+// - Rain / Blizzard:     raise pass difficulty (`weatherPassModifier`).
+// - Meteor Shower:       a meteor is telegraphed one round, then strikes its
+//                        tile, knocking down whoever stands there.
+
+/** Probability that a single step on Mud terrain ends in a slip (knockdown). */
+export const MUD_SLIP_CHANCE = 0.25;
+
+/** Number of seeded hazard tiles placed on a Lava pitch. */
+export const LAVA_HAZARD_COUNT = 6;
+
+/** Extra pass difficulty from the current weather (Rain +1, Blizzard +2). */
+export const weatherPassModifier = (weather: Weather): number => {
+  switch (weather) {
+    case Weather.RAIN:
+      return 1;
+    case Weather.BLIZZARD:
+      return 2;
+    default:
+      return 0;
+  }
+};
+
+/** True when `pos` is one of the seeded lava hazard tiles. */
+export const isHazard = (pos: Position, hazards: Position[]): boolean =>
+  hazards.some((h) => h.x === pos.x && h.y === pos.y);
+
+/**
+ * Pick `count` distinct interior tiles (off the endzone rows) as lava hazards,
+ * deterministically from the injected rng. A bounded guard stops the loop even
+ * if the rng keeps colliding.
+ */
+export const generateLavaHazards = (count: number, rng: Rng): Position[] => {
+  const hazards: Position[] = [];
+  let guard = 0;
+  while (hazards.length < count && guard < count * 40) {
+    guard++;
+    const x = 1 + Math.floor(rng() * (BOARD_WIDTH - 2));
+    const y = 2 + Math.floor(rng() * (BOARD_HEIGHT - 4));
+    if (!hazards.some((p) => p.x === x && p.y === y)) hazards.push({ x, y });
+  }
+  return hazards;
+};
+
+export interface StepEffect {
+  /** Where the mover ends up (ice can carry them one tile further). */
+  position: Position;
+  /** True when the mover is knocked down (stunned) on arrival. */
+  knockedDown: boolean;
+  /** A player-facing line describing what happened, or null for a plain step. */
+  log: string | null;
+}
+
+/**
+ * Resolve the terrain side-effect of a single completed step from `from` to
+ * `to`. Grass is a no-op. Only Mud consumes the rng (its slip roll); ice slide
+ * and lava hazards are deterministic given their inputs. `isBlocked` reports
+ * whether a prospective slide tile is occupied, so ice never slides onto a unit.
+ */
+export const resolveTerrainStep = (
+  terrain: TerrainType,
+  from: Position,
+  to: Position,
+  hazards: Position[],
+  isBlocked: (pos: Position) => boolean,
+  rng: Rng
+): StepEffect => {
+  if (terrain === TerrainType.LAVA && isHazard(to, hazards)) {
+    return {
+      position: to,
+      knockedDown: true,
+      log: `The molten ground erupts at (${to.x}, ${to.y}) - knocked down on a lava hazard!`,
+    };
+  }
+
+  if (terrain === TerrainType.MUD && rng() < MUD_SLIP_CHANCE) {
+    return { position: to, knockedDown: true, log: 'Lost their footing in the mud and slipped!' };
+  }
+
+  if (terrain === TerrainType.ICE) {
+    const dx = Math.sign(to.x - from.x);
+    const dy = Math.sign(to.y - from.y);
+    const slide = { x: to.x + dx, y: to.y + dy };
+    if ((dx !== 0 || dy !== 0) && isPositionValid(slide) && !isBlocked(slide)) {
+      return { position: slide, knockedDown: false, log: `Slid across the ice to (${slide.x}, ${slide.y}).` };
+    }
+  }
+
+  return { position: to, knockedDown: false, log: null };
+};
+
+export interface MeteorResolution {
+  /** The tile struck by the meteor telegraphed last round, or null if none. */
+  strike: Position | null;
+  /** The freshly telegraphed meteor for the upcoming turn. */
+  next: MeteorWarning;
+}
+
+/** Choose an interior impact tile for a meteor that will land on `strikeTurn`. */
+export const chooseMeteorTarget = (strikeTurn: number, rng: Rng): MeteorWarning => ({
+  target: {
+    x: 1 + Math.floor(rng() * (BOARD_WIDTH - 2)),
+    y: 1 + Math.floor(rng() * (BOARD_HEIGHT - 2)),
+  },
+  strikeTurn,
+});
+
+/**
+ * Advance the meteor telegraph by one turn: the currently telegraphed meteor
+ * (if any) lands now, and a fresh one is telegraphed for `upcomingTurn`. This is
+ * the one-round warning - a meteor is always visible for a full round before it
+ * strikes.
+ */
+export const advanceMeteor = (
+  current: MeteorWarning | null,
+  upcomingTurn: number,
+  rng: Rng
+): MeteorResolution => ({
+  strike: current ? current.target : null,
+  next: chooseMeteorTarget(upcomingTurn, rng),
+});

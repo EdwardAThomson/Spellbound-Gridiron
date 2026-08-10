@@ -10,10 +10,17 @@ import {
   getPlayerAtPosition,
   checkWinner,
   validateSpellCast,
+  weatherPassModifier,
+  isHazard,
+  generateLavaHazards,
+  resolveTerrainStep,
+  chooseMeteorTarget,
+  advanceMeteor,
+  MUD_SLIP_CHANCE,
   WIN_SCORE,
   MAX_TURNS,
 } from './rules';
-import { Player, PlayerRole, TeamSide } from '../types';
+import { Player, PlayerRole, TeamSide, TerrainType, Weather } from '../types';
 
 // A fake rng that yields a fixed sequence, cycling if exhausted. This lets each
 // test pin down exactly which "roll" the rules logic sees.
@@ -165,6 +172,125 @@ describe('validateSpellCast', () => {
     expect(validateSpellCast('HEAL', caster, stunnedAlly.position, stunnedAlly, 1).valid).toBe(true);
     expect(validateSpellCast('HEAL', caster, healthyAlly.position, healthyAlly, 1).valid).toBe(false);
     expect(validateSpellCast('HEAL', caster, stunnedEnemy.position, stunnedEnemy, 1).valid).toBe(false);
+  });
+});
+
+describe('weatherPassModifier', () => {
+  it('adds no difficulty in clear skies', () => {
+    expect(weatherPassModifier(Weather.CLEAR)).toBe(0);
+  });
+
+  it('makes passes harder in rain and blizzard', () => {
+    expect(weatherPassModifier(Weather.RAIN)).toBe(1);
+    expect(weatherPassModifier(Weather.BLIZZARD)).toBe(2);
+  });
+
+  it('feeds the pass difficulty', () => {
+    // distance 0 => base 2; blizzard adds 2 => difficulty 4.
+    const clear = resolvePass(mkPlayer(), { x: 0, y: 0 }, seq([0.99]), weatherPassModifier(Weather.CLEAR));
+    const blizzard = resolvePass(mkPlayer(), { x: 0, y: 0 }, seq([0.99]), weatherPassModifier(Weather.BLIZZARD));
+    expect(clear.difficulty).toBe(2);
+    expect(blizzard.difficulty).toBe(4);
+  });
+});
+
+describe('generateLavaHazards / isHazard', () => {
+  it('produces the requested number of distinct interior tiles', () => {
+    // A ramping rng keeps every draw distinct so no collisions are dropped.
+    let n = 0;
+    const rng = () => (n++ % 100) / 100;
+    const hazards = generateLavaHazards(6, rng);
+    expect(hazards).toHaveLength(6);
+    // All interior (off the endzone rows) and unique.
+    const keys = new Set(hazards.map((h) => `${h.x},${h.y}`));
+    expect(keys.size).toBe(6);
+    for (const h of hazards) {
+      expect(h.x).toBeGreaterThanOrEqual(1);
+      expect(h.x).toBeLessThanOrEqual(10);
+      expect(h.y).toBeGreaterThanOrEqual(2);
+      expect(h.y).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it('reports membership by tile coordinates', () => {
+    const hazards = [{ x: 3, y: 4 }, { x: 7, y: 9 }];
+    expect(isHazard({ x: 3, y: 4 }, hazards)).toBe(true);
+    expect(isHazard({ x: 3, y: 5 }, hazards)).toBe(false);
+    expect(isHazard({ x: 0, y: 0 }, [])).toBe(false);
+  });
+});
+
+describe('resolveTerrainStep', () => {
+  const open = () => false;
+
+  it('is a no-op on grass', () => {
+    const r = resolveTerrainStep(TerrainType.GRASS, { x: 2, y: 2 }, { x: 3, y: 2 }, [], open, seq([0]));
+    expect(r).toEqual({ position: { x: 3, y: 2 }, knockedDown: false, log: null });
+  });
+
+  it('knocks a mover down on a lava hazard tile', () => {
+    const r = resolveTerrainStep(TerrainType.LAVA, { x: 2, y: 2 }, { x: 3, y: 2 }, [{ x: 3, y: 2 }], open, seq([0.99]));
+    expect(r.knockedDown).toBe(true);
+    expect(r.position).toEqual({ x: 3, y: 2 });
+    expect(r.log).toContain('lava');
+  });
+
+  it('leaves a lava step on a safe tile untouched', () => {
+    const r = resolveTerrainStep(TerrainType.LAVA, { x: 2, y: 2 }, { x: 3, y: 2 }, [{ x: 9, y: 9 }], open, seq([0.99]));
+    expect(r.knockedDown).toBe(false);
+    expect(r.log).toBeNull();
+  });
+
+  it('slips in the mud when the roll is below the slip chance', () => {
+    const belowChance = MUD_SLIP_CHANCE / 2;
+    const r = resolveTerrainStep(TerrainType.MUD, { x: 2, y: 2 }, { x: 3, y: 2 }, [], open, seq([belowChance]));
+    expect(r.knockedDown).toBe(true);
+    expect(r.log).toContain('mud');
+  });
+
+  it('keeps its footing in the mud when the roll clears the slip chance', () => {
+    const r = resolveTerrainStep(TerrainType.MUD, { x: 2, y: 2 }, { x: 3, y: 2 }, [], open, seq([0.99]));
+    expect(r.knockedDown).toBe(false);
+    expect(r.position).toEqual({ x: 3, y: 2 });
+  });
+
+  it('slides one extra tile on ice in the travel direction', () => {
+    const r = resolveTerrainStep(TerrainType.ICE, { x: 2, y: 2 }, { x: 3, y: 3 }, [], open, seq([0]));
+    expect(r.position).toEqual({ x: 4, y: 4 });
+    expect(r.knockedDown).toBe(false);
+    expect(r.log).toContain('ice');
+  });
+
+  it('stops the ice slide at a blocked or off-board tile', () => {
+    // Blocked slide tile: mover rests on the stepped tile instead.
+    const blocked = resolveTerrainStep(TerrainType.ICE, { x: 2, y: 2 }, { x: 3, y: 2 }, [], () => true, seq([0]));
+    expect(blocked.position).toEqual({ x: 3, y: 2 });
+    // Sliding off the right edge (x=11 -> 12 invalid): mover stays at the edge.
+    const edge = resolveTerrainStep(TerrainType.ICE, { x: 10, y: 5 }, { x: 11, y: 5 }, [], open, seq([0]));
+    expect(edge.position).toEqual({ x: 11, y: 5 });
+  });
+});
+
+describe('meteor telegraph', () => {
+  it('chooses an interior impact tile for the given strike turn', () => {
+    const m = chooseMeteorTarget(4, seq([0, 0]));
+    expect(m.strikeTurn).toBe(4);
+    expect(m.target.x).toBeGreaterThanOrEqual(1);
+    expect(m.target.y).toBeGreaterThanOrEqual(1);
+    expect(isPositionValid(m.target)).toBe(true);
+  });
+
+  it('lands the telegraphed meteor and telegraphs the next one', () => {
+    const current = { target: { x: 5, y: 9 }, strikeTurn: 3 };
+    const res = advanceMeteor(current, 4, seq([0.5, 0.5]));
+    expect(res.strike).toEqual({ x: 5, y: 9 });
+    expect(res.next.strikeTurn).toBe(4);
+  });
+
+  it('strikes nothing on the opening advance (no meteor telegraphed yet)', () => {
+    const res = advanceMeteor(null, 1, seq([0, 0]));
+    expect(res.strike).toBeNull();
+    expect(res.next.strikeTurn).toBe(1);
   });
 });
 

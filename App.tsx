@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, INITIAL_MANA } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -55,6 +55,8 @@ export default function App() {
         boardHeight: BOARD_HEIGHT,
         terrain: TerrainType.GRASS,
         weather: Weather.CLEAR,
+        hazards: [],
+        meteor: null,
         gameLog: [],
         commentary: "Welcome to Spellbound Gridiron! The players are taking the field.",
         isGameOver: false,
@@ -105,10 +107,22 @@ export default function App() {
         return players;
     };
 
-    // Terrain is chosen on the start screen before the match begins.
+    // Terrain and weather are chosen on the start screen before the match begins.
     const handleSelectTerrain = (terrain: TerrainType) => {
         setGameState(prev => ({ ...prev, terrain }));
     };
+
+    const handleSelectWeather = (weather: Weather) => {
+        setGameState(prev => ({ ...prev, weather }));
+    };
+
+    // Seed the environmental hazards a fresh match starts with: lava hazard
+    // tiles for a Lava pitch, and the first telegraphed meteor for a Meteor
+    // Shower (visible during turn 1, striking when turn 1 ends).
+    const seedHazards = (terrain: TerrainType) =>
+        terrain === TerrainType.LAVA ? generateLavaHazards() : [];
+    const seedMeteor = (weather: Weather) =>
+        weather === Weather.METEOR_SHOWER ? advanceMeteor(null, 1).next : null;
 
     const handleStartGame = async () => {
         setHasGameStarted(true);
@@ -116,6 +130,8 @@ export default function App() {
         // Instant setup with temporary names -- race and name mixed up
         setGameState(prev => ({
             ...prev,
+            hazards: seedHazards(prev.terrain),
+            meteor: seedMeteor(prev.weather),
             homeTeam: {
                 ...prev.homeTeam,
                 name: 'Elven Vanguard',
@@ -291,19 +307,41 @@ export default function App() {
     // --- Game Logic Actions ---
 
     const handleMove = (player: Player, to: Position) => {
-        // Update position
+        // Update position (movement point spent for the step taken).
         const updatedPlayer = {
             ...player,
             position: to,
             movesRemaining: player.movesRemaining - 1
         };
 
-        // Check for Ball Pickup.
-        // Ball pickup is automatic with no dice roll (by design): moving onto the
-        // loose ball's tile always picks it up. This is documented in GAME_RULES.
         let newBallPos = gameState.ballPosition;
 
-        if (gameState.ballPosition && to.x === gameState.ballPosition.x && to.y === gameState.ballPosition.y) {
+        // Terrain resolves the step: Mud may slip (knockdown), a Lava hazard
+        // knocks down, Ice slides the mover one further open tile. Grass is inert.
+        const occupied = (pos: Position) => !!getPlayerAtPosition(pos, getAllPlayers());
+        const step = resolveTerrainStep(gameState.terrain, player.position, to, gameState.hazards, occupied);
+        updatedPlayer.position = step.position;
+        const landed = step.position;
+        if (step.log) addLog(step.log);
+
+        if (step.knockedDown) {
+            // A slip / hazard fall ends the action prone: no pickup, no score.
+            updatedPlayer.isStunned = true;
+            updatedPlayer.movesRemaining = 0;
+            updatedPlayer.actionTaken = true;
+            if (updatedPlayer.hasBall) {
+                updatedPlayer.hasBall = false;
+                newBallPos = scatterBall(landed);
+                addLog('The ball comes loose in the tumble!');
+            }
+            updatePlayerState(updatedPlayer, { ballPosition: newBallPos });
+            return;
+        }
+
+        // Check for Ball Pickup at the tile the mover actually came to rest on.
+        // Ball pickup is automatic with no dice roll (by design): moving onto the
+        // loose ball's tile always picks it up. This is documented in GAME_RULES.
+        if (newBallPos && landed.x === newBallPos.x && landed.y === newBallPos.y) {
             updatedPlayer.hasBall = true;
             newBallPos = null;
             addLog(`${player.name} picked up the ball!`);
@@ -315,11 +353,11 @@ export default function App() {
         let touchdown = false;
 
         if (updatedPlayer.hasBall) {
-            if (player.team === TeamSide.HOME && to.y >= BOARD_HEIGHT - 1) {
+            if (player.team === TeamSide.HOME && landed.y >= BOARD_HEIGHT - 1) {
                 scoreHome += 7; // TD value
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.homeTeam.name}!`);
-            } else if (player.team === TeamSide.AWAY && to.y <= 0) {
+            } else if (player.team === TeamSide.AWAY && landed.y <= 0) {
                 scoreAway += 7;
                 touchdown = true;
                 addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.awayTeam.name}!`);
@@ -376,7 +414,8 @@ export default function App() {
     };
 
     const handlePass = (thrower: Player, targetPos: Position) => {
-        const result = resolvePass(thrower, targetPos);
+        // Rain / Blizzard raise the pass difficulty (weatherPassModifier).
+        const result = resolvePass(thrower, targetPos, gameState.weather);
         addLog(result.log);
 
         let newBallPos: Position | null = null;
@@ -513,13 +552,55 @@ export default function App() {
             const newTurnNumber = nextTeam === TeamSide.HOME ? prev.turn + 1 : prev.turn;
             outcome = checkWinner(prev.homeTeam.score, prev.awayTeam.score, newTurnNumber);
 
+            let homeTeam = nextTeam === TeamSide.HOME ? refreshTeam(prev.homeTeam) : prev.homeTeam;
+            let awayTeam = nextTeam === TeamSide.AWAY ? refreshTeam(prev.awayTeam) : prev.awayTeam;
+
+            // Meteor Shower: the meteor telegraphed last round strikes now (after
+            // the refresh, so a fresh unit standing on the tile is still hit), then
+            // a new one is telegraphed for the incoming turn.
+            let meteor = prev.meteor;
+            let ballPosition = prev.ballPosition;
+            const meteorLogs: string[] = [];
+            if (prev.weather === Weather.METEOR_SHOWER) {
+                const res = advanceMeteor(prev.meteor, newTurnNumber);
+                meteor = res.next;
+                if (res.strike) {
+                    const hit = res.strike;
+                    const strikePlayer = (t: TeamData) => ({
+                        ...t,
+                        players: t.players.map(p => {
+                            if (p.position.x !== hit.x || p.position.y !== hit.y) return p;
+                            meteorLogs.push(`☄️ A meteor smashes into ${p.name} at (${hit.x}, ${hit.y})!`);
+                            const knocked = { ...p, isStunned: true, movesRemaining: 0, actionTaken: true };
+                            if (knocked.hasBall) {
+                                knocked.hasBall = false;
+                                ballPosition = scatterBall(hit);
+                            }
+                            return knocked;
+                        }),
+                    });
+                    homeTeam = strikePlayer(homeTeam);
+                    awayTeam = strikePlayer(awayTeam);
+                    if (meteorLogs.length === 0) {
+                        meteorLogs.push(`☄️ A meteor cracks the pitch at (${hit.x}, ${hit.y})!`);
+                    }
+                    if (ballPosition && ballPosition.x === hit.x && ballPosition.y === hit.y) {
+                        ballPosition = scatterBall(hit);
+                    }
+                }
+                meteorLogs.push(`⚠️ A meteor is sighted over (${meteor.target.x}, ${meteor.target.y}) - clear the tile!`);
+            }
+
             return {
                 ...prev,
                 turn: newTurnNumber,
                 currentTeam: nextTeam,
                 selectedPlayerId: null,
-                homeTeam: nextTeam === TeamSide.HOME ? refreshTeam(prev.homeTeam) : prev.homeTeam,
-                awayTeam: nextTeam === TeamSide.AWAY ? refreshTeam(prev.awayTeam) : prev.awayTeam,
+                homeTeam,
+                awayTeam,
+                ballPosition,
+                meteor,
+                gameLog: meteorLogs.length ? [...prev.gameLog, ...meteorLogs] : prev.gameLog,
                 isGameOver: outcome.isGameOver,
                 winner: outcome.winner,
             };
@@ -550,6 +631,8 @@ export default function App() {
             boardHeight: BOARD_HEIGHT,
             terrain: prev.terrain,
             weather: prev.weather,
+            hazards: seedHazards(prev.terrain),
+            meteor: seedMeteor(prev.weather),
             gameLog: ["A new match begins! The mystical gates open once more."],
             commentary: "Welcome back to Spellbound Gridiron!",
             isGameOver: false,
@@ -617,6 +700,11 @@ export default function App() {
                 if (y === 0) endZone = TeamSide.AWAY;
                 if (y === BOARD_HEIGHT - 1) endZone = TeamSide.HOME;
 
+                // Environmental telegraphs: seeded lava hazards and the incoming
+                // meteor's impact tile are drawn so the risk is visible.
+                const tileIsHazard = gameState.terrain === TerrainType.LAVA && isHazard(pos, gameState.hazards);
+                const tileIsMeteor = !!gameState.meteor && gameState.meteor.target.x === x && gameState.meteor.target.y === y;
+
                 tiles.push(
                     <BoardTile
                         key={`${x}-${y}`}
@@ -629,6 +717,8 @@ export default function App() {
                         targetingType={targetingAction}
                         isBall={isBall}
                         isEndZone={endZone}
+                        isHazard={tileIsHazard}
+                        isMeteorTarget={tileIsMeteor}
                         onClick={() => handleTileClick(x, y)}
                     >
                         {player && <PlayerToken player={player} onClick={(e) => { e.stopPropagation(); handleTileClick(x, y); }} />}
@@ -687,6 +777,11 @@ export default function App() {
                         <div className={`mt-2 text-center text-xs font-bold py-1 rounded ${gameState.currentTeam === TeamSide.HOME ? 'bg-blue-900/50 text-blue-200' : 'bg-red-900/50 text-red-200'}`}>
                             Current: {gameState.currentTeam}
                         </div>
+                        {gameState.meteor && (
+                            <div className="mt-2 text-center text-[11px] font-bold py-1 rounded bg-orange-900/60 text-orange-200 border border-orange-500/40 animate-pulse">
+                                ☄️ Meteor incoming at ({gameState.meteor.target.x}, {gameState.meteor.target.y})
+                            </div>
+                        )}
                     </div>
 
                     {/* Selected Unit Card */}
@@ -835,6 +930,8 @@ export default function App() {
                                 isThinking={isAiThinking}
                                 terrain={gameState.terrain}
                                 onSelectTerrain={handleSelectTerrain}
+                                weather={gameState.weather}
+                                onSelectWeather={handleSelectWeather}
                             />
                         )}
 

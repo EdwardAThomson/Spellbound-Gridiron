@@ -1,5 +1,5 @@
 import React from 'react';
-import { TerrainType } from '../types';
+import { TerrainType, Weather } from '../types';
 import { TERRAIN_CONFIG } from '../constants';
 
 interface StartOverlayProps {
@@ -7,6 +7,8 @@ interface StartOverlayProps {
     isThinking?: boolean;
     terrain: TerrainType;
     onSelectTerrain: (terrain: TerrainType) => void;
+    weather: Weather;
+    onSelectWeather: (weather: Weather) => void;
 }
 
 const TERRAIN_ORDER: TerrainType[] = [
@@ -16,7 +18,16 @@ const TERRAIN_ORDER: TerrainType[] = [
     TerrainType.ICE,
 ];
 
-export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain }: StartOverlayProps) {
+// Weather choices and the mechanical effect each has, shown as button tooltips
+// so the risk is clear before kickoff.
+const WEATHER_ORDER: { weather: Weather; label: string; effect: string }[] = [
+    { weather: Weather.CLEAR, label: 'Clear', effect: 'Perfect conditions. No penalties.' },
+    { weather: Weather.RAIN, label: 'Rain', effect: 'Slippery ball: passes are +1 harder.' },
+    { weather: Weather.BLIZZARD, label: 'Blizzard', effect: 'Driving snow: passes are +2 harder.' },
+    { weather: Weather.METEOR_SHOWER, label: 'Meteor Shower', effect: 'Meteors fall: a tile is telegraphed one round, then struck, knocking down anyone on it.' },
+];
+
+export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain, weather, onSelectWeather }: StartOverlayProps) {
     return (
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/60 backdrop-blur-md">
             <div className="text-center animate-in fade-in zoom-in duration-700">
@@ -53,6 +64,33 @@ export default function StartOverlay({ onStart, isThinking, terrain, onSelectTer
                                     <div className="text-[10px] font-bold uppercase tracking-wider py-1 px-1 bg-stone-900/90 text-stone-200">
                                         {info.name}
                                     </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Weather picker */}
+                <div className="mb-10">
+                    <p className="text-stone-500 uppercase tracking-widest text-[10px] font-mono mb-3">Choose the Weather</p>
+                    <div className="flex gap-2 justify-center flex-wrap max-w-md mx-auto">
+                        {WEATHER_ORDER.map(({ weather: w, label, effect }) => {
+                            const active = w === weather;
+                            return (
+                                <button
+                                    key={w}
+                                    type="button"
+                                    onClick={() => onSelectWeather(w)}
+                                    disabled={isThinking}
+                                    aria-pressed={active}
+                                    title={effect}
+                                    className={`px-3 py-2 rounded-lg border-2 text-[11px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 ${
+                                        active
+                                            ? 'border-amber-400 bg-amber-500/10 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,0.3)]'
+                                            : 'border-white/10 bg-stone-900/70 text-stone-300 hover:border-white/40'
+                                    }`}
+                                >
+                                    {label}
                                 </button>
                             );
                         })}

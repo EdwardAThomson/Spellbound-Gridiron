@@ -115,3 +115,26 @@ Verify: all 3 commands passed (no `transparenttextures` in source; `<svg` plus M
 
 Note for next step: Task 3 landed and fully verified (31/31 unit tests, all three verify commands green). Worktree holds exactly the three modified files staged-free for the harness; git history and index untouched. Next item is Task 4 (real Mud/Lava/Ice terrain and Rain/Blizzard/Meteor Shower weather mechanics, mirrored across GAME_RULES, RuleBookModal, and README), which builds on the terrain-selection groundwork laid here.
 
+## 2026-08-10 — i_3ce4ae81953a — Task 4: wire real terrain effects (Mud slip, Lava seeded hazard knockdown, Ice slide) and weather (Rain/Blizzard/Meteor Shower with one-round meteor telegraph) into services/rules.ts, telegraph risk in the UI, preserve terrain/weather/hazard/meteor state in save/load, and mirror every effect across GAME_RULES, RuleBookModal, README, and the ROADMAP checkboxes.
+
+Task 4: wire real terrain and weather mechanics into the rules engine, telegraph the risk in the UI, and mirror every effect across code and player-facing docs.
+
+Terrain effects (pure, rng-injected in `services/rules.ts`, applied in `App.handleMove`):
+- Mud (Orc Pits): every step risks a slip; a failed step drops the mover prone (Stunned) where it lands and spills the ball.
+- Lava (Demon Forge): a set of hazard tiles is seeded at kickoff (`generateLavaHazards`); stepping onto one knocks the unit down.
+- Ice (Frozen Wastes): a step slides one extra tile in the travel direction when that tile is open, stopping at blocked or off-board tiles.
+
+Weather effects:
+- Rain (+1) and Blizzard (+2) raise pass difficulty via `weatherPassModifier`, threaded through `resolvePass`.
+- Meteor Shower telegraphs an impact tile one full round, then strikes it on turn advance (after the refresh), knocking down whoever stands there and jarring the ball loose, then telegraphs the next.
+
+UI: `BoardTile` gains `isHazard`/`isMeteorTarget` telegraphs (⚠️ lava, ☄️ meteor), `App` shows an incoming-meteor banner, and `StartOverlay` adds a weather picker with per-option effect tooltips. New `GameState` fields (`hazards`, `meteor`) are seeded on start and New Game.
+
+Docs kept in sync: terrain/weather effects mirrored across `GAME_RULES` (`utils/contextSerializer.ts`), the rulebook, README, and the ROADMAP checkboxes (Terrain effects and Weather effects now checked). New pure logic is covered in `services/rules.test.ts`; `services/gameUtils.ts` wraps it with the real rng.
+
+Verify: both checklist commands passed (exit 0). The grep gate confirms blizzard/meteor and mud/lava/ice references across the serializer, README, and components, and no `Math.random` in `services/rules.ts`; `npm run check` runs the Vitest unit suite plus the Playwright chromium e2e smoke test green.
+
+---
+
+Note for the next step: Task 4 complete and verified, both verify commands green (grep gate clean; `npm run check` passes unit + e2e). 12 files staged in the worktree, nothing committed by me. This is the final task (0-4) in the work order; no follow-up implementation pending. Left for the harness to commit.
+

@@ -23,6 +23,16 @@ Mechanics:
   - Fireball: Range 4, Cost 3. Stuns an enemy target.
   - Blink: Range 5, Cost 4. Teleport to an empty target tile.
   - Revitalize: Range 1, Cost 2. Remove Stun from a stunned ally.
+- Terrain: The chosen pitch changes how movement resolves.
+  - Grass (Elven Fields): standard footing, no effect.
+  - Mud (Orc Pits): each step risks a slip - a failed step drops the unit prone (Stunned) where it lands, dropping the ball.
+  - Lava (Demon Forge): a fixed set of glowing hazard tiles is seeded at kickoff; stepping onto one knocks the unit down (Stunned).
+  - Ice (Frozen Wastes): a step slides one extra tile in the same direction when that tile is open.
+- Weather: The sky changes the odds each match.
+  - Clear: no penalty.
+  - Rain: wet ball - pass difficulty +1.
+  - Blizzard: driving snow - pass difficulty +2.
+  - Meteor Shower: a meteor tile is telegraphed one full round, then strikes it, knocking down anyone standing there and jarring the ball loose.
 - Stats:
   - STR (Strength): Combat/Tackling.
   - SKL (Skill): Passing/Catching.
@@ -38,6 +48,8 @@ export function serializeGameState(state: GameState): string {
         awayTeam,
         weather,
         terrain,
+        hazards,
+        meteor,
         ballPosition,
         gameLog
     } = state;
@@ -53,6 +65,14 @@ export function serializeGameState(state: GameState): string {
         ? `Ball is on the ground at (${ballPosition.x}, ${ballPosition.y})`
         : `Ball is held by a player.`;
 
+    // Active environmental hazards (lava tiles, telegraphed meteor).
+    const hazardSummary = hazards && hazards.length > 0
+        ? `Lava hazard tiles: ${hazards.map(h => `(${h.x}, ${h.y})`).join(', ')}`
+        : `No terrain hazards active.`;
+    const meteorSummary = meteor
+        ? `A meteor is telegraphed to strike (${meteor.target.x}, ${meteor.target.y}) next round.`
+        : `No meteor incoming.`;
+
     // Recent Logs (Last 10)
     const recentLogs = gameLog.slice(-10).map(log => `- ${log}`).join('\n');
 
@@ -64,6 +84,8 @@ ${GAME_RULES}
 ${scoreSummary}
 ${statusSummary}
 ${ballSummary}
+${hazardSummary}
+${meteorSummary}
 
 [RECENT EVENTS]
 ${recentLogs}

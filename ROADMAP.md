@@ -15,12 +15,12 @@ All six resolved in Task 1 (2026-08-10).
 
 ## Match variety
 
-- [ ] **Terrain effects.** `TerrainType` (Mud / Lava / Ice) and `TERRAIN_CONFIG` are already defined in `constants.ts`, but only Grass behaves differently in practice. Wire each terrain into movement, tackle, and pass resolution in `services/gameUtils.ts`.
-  - Mud (Orc Pits): movement penalty / risk of slipping.
-  - Lava (Demon Forge): tile damage; possible hazard squares.
-  - Ice (Frozen Wastes): slide on movement; reduced control.
+- [x] **Terrain effects.** Wired into movement in `services/rules.ts` (rng-injected, unit-tested) and applied in `App`'s `handleMove`. Terrain is chosen on the start screen and mirrored in `GAME_RULES`, the rulebook, and the README. (Task 4, 2026-08-10)
+  - Mud (Orc Pits): each step risks a slip that drops the unit prone (Stunned) and spills the ball.
+  - Lava (Demon Forge): seeded hazard tiles (⚠️ telegraph) knock down anyone stepping on them.
+  - Ice (Frozen Wastes): a step slides one extra tile in the travel direction when that tile is open.
 - [ ] **Additional pitch types** beyond the four currently stubbed (e.g. arena variants, themed home pitches per race).
-- [ ] **Weather effects.** `Weather` enum exists (Clear / Rain / Blizzard / Meteor Shower) but has no mechanical impact. Apply effects to passing accuracy, movement, and possibly random events (e.g. meteors as board hazards).
+- [x] **Weather effects.** Wired in Task 4. Rain (+1) and Blizzard (+2) raise pass difficulty (`weatherPassModifier`); Meteor Shower telegraphs a tile one round (☄️) then strikes it, knocking down whoever stands there and spilling the ball. Weather is chosen on the start screen and mirrored across `GAME_RULES`, the rulebook, and the README. (2026-08-10)
 
 ## Player development
 

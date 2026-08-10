@@ -67,6 +67,8 @@ const mkState = (over: Partial<GameState> = {}): GameState => ({
   boardHeight: BOARD_HEIGHT,
   terrain: TerrainType.MUD,
   weather: Weather.RAIN,
+  hazards: [{ x: 3, y: 4 }, { x: 8, y: 11 }],
+  meteor: { target: { x: 5, y: 9 }, strikeTurn: 8 },
   gameLog: ['The mystical gates open!', 'Lineman 1 picked up the ball!'],
   commentary: 'What a play, folks!',
   isGameOver: false,
@@ -98,6 +100,33 @@ describe('save round-trip fidelity', () => {
     saveGame(state, true, store);
     const loaded = loadGame(store);
     expect(loaded.gameState).toEqual(state);
+  });
+
+  it('round-trips lava hazards and a meteor telegraph exactly', () => {
+    const store = memStore();
+    const state = mkState({
+      terrain: TerrainType.LAVA,
+      weather: Weather.METEOR_SHOWER,
+      hazards: [{ x: 1, y: 2 }, { x: 6, y: 9 }, { x: 10, y: 15 }],
+      meteor: { target: { x: 4, y: 7 }, strikeTurn: 9 },
+    });
+    saveGame(state, true, store);
+    const loaded = loadGame(store);
+    expect(loaded.gameState).toEqual(state);
+    expect(loaded.gameState?.hazards).toEqual(state.hazards);
+    expect(loaded.gameState?.meteor).toEqual(state.meteor);
+  });
+
+  it('round-trips an empty-hazard, no-meteor snapshot (Grass / Clear)', () => {
+    const store = memStore();
+    const state = mkState({
+      terrain: TerrainType.GRASS,
+      weather: Weather.CLEAR,
+      hazards: [],
+      meteor: null,
+    });
+    saveGame(state, true, store);
+    expect(loadGame(store).gameState).toEqual(state);
   });
 
   it('writes under the versioned key with the current version tag', () => {

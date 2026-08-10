@@ -55,12 +55,21 @@ Each player has unique stats that define their capabilities:
 
 ### Terrain & Weather
 
-The arena changes every match (in the future it will affect strategy):
+Pick the pitch and the sky on the start screen; both have real mechanical effects, telegraphed on the board and in the rulebook.
 
--   **Elven Fields (Grass)**: Standard play conditions.
--   **Orc Pits (Mud)**: Slippery; movement is riskier. (not yet implemented)
--   **Demon Forge (Lava)**: Dangerous footing. (not yet implemented)
--   **Frozen Wastes (Ice)**: High slide potential. (not yet implemented)
+**Terrain** (affects movement):
+
+-   **Elven Fields (Grass)**: Standard footing, no effect.
+-   **Orc Pits (Mud)**: Every step risks a slip. A failed step drops the unit prone (Stunned) where it lands and shakes the ball loose.
+-   **Demon Forge (Lava)**: A set of glowing hazard tiles is seeded at kickoff (shown with a ⚠️). Step onto one and the molten ground knocks the unit down.
+-   **Frozen Wastes (Ice)**: A step slides one extra tile in the same direction whenever that tile is open.
+
+**Weather** (affects passing and events):
+
+-   **Clear**: No penalty.
+-   **Rain**: Wet ball; passes are +1 harder.
+-   **Blizzard**: Driving snow; passes are +2 harder.
+-   **Meteor Shower**: A meteor tile is telegraphed one full round (shown with a ☄️), then strikes it, knocking down anyone standing there and jarring the ball loose. Clear the tile before it lands.
 
 ## Features
 

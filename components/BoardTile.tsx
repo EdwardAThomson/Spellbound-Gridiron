@@ -11,6 +11,8 @@ interface BoardTileProps {
   targetingType: 'PASS' | 'SPELL' | null;
   isBall: boolean;
   isEndZone: TeamSide | null;
+  isHazard?: boolean;
+  isMeteorTarget?: boolean;
   onClick: () => void;
   children?: React.ReactNode;
 }
@@ -155,6 +157,8 @@ const BoardTile: React.FC<BoardTileProps> = ({
   targetingType,
   isBall,
   isEndZone,
+  isHazard,
+  isMeteorTarget,
   onClick,
   children,
 }) => {
@@ -203,6 +207,22 @@ const BoardTile: React.FC<BoardTileProps> = ({
 
       {/* Interaction / endzone tint, above the terrain art but below tokens. */}
       <div className={`absolute inset-0 pointer-events-none transition-colors duration-200 ${tint}`} />
+
+      {/* Lava hazard telegraph: a seeded tile that knocks down anyone stepping on it. */}
+      {isHazard && (
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center" title="Lava hazard - stepping here knocks you down!" aria-label="Lava hazard tile">
+          <div className="absolute inset-0 bg-orange-500/25 ring-1 ring-inset ring-orange-400/60" />
+          <span className="relative text-xs drop-shadow">⚠️</span>
+        </div>
+      )}
+
+      {/* Meteor telegraph: the tile an incoming meteor will strike next round. */}
+      {isMeteorTarget && (
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center animate-pulse" title="Incoming meteor - clear this tile!" aria-label="Incoming meteor impact tile">
+          <div className="absolute inset-0 bg-red-600/30 ring-2 ring-inset ring-red-400/80" />
+          <span className="relative text-sm drop-shadow">☄️</span>
+        </div>
+      )}
 
       {isBall && (
         <div className="absolute z-20 w-3/4 h-3/4 animate-pulse pointer-events-none">
