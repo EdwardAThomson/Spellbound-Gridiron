@@ -4,11 +4,14 @@ import {
   isPositionValid,
   isAdjacent,
   manhattanDistance,
-  passDistance,
   resolveTackle,
   resolvePass,
   scatterPosition,
   getPlayerAtPosition,
+  checkWinner,
+  validateSpellCast,
+  WIN_SCORE,
+  MAX_TURNS,
 } from './rules';
 import { Player, PlayerRole, TeamSide } from '../types';
 
@@ -72,11 +75,6 @@ describe('geometry helpers', () => {
     expect(getPlayerAtPosition({ x: 5, y: 5 }, [a, b])?.id).toBe('b');
     expect(getPlayerAtPosition({ x: 9, y: 9 }, [a, b])).toBeUndefined();
   });
-
-  it('uses floored-euclidean distance for pass difficulty', () => {
-    expect(passDistance({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
-    expect(passDistance({ x: 0, y: 0 }, { x: 1, y: 1 })).toBe(1);
-  });
 });
 
 describe('resolveTackle', () => {
@@ -103,11 +101,70 @@ describe('resolvePass', () => {
     expect(result.success).toBe(true);
   });
 
+  it('scales difficulty as 2 + manhattan distance to the target', () => {
+    // from (0,0) to (3,4): manhattan 7 => difficulty 9.
+    const result = resolvePass(mkPlayer(), { x: 3, y: 4 }, seq([0.99]));
+    expect(result.difficulty).toBe(9);
+  });
+
   it('fails when the difficulty outruns the roll', () => {
     // far target raises difficulty above a minimal roll.
     const result = resolvePass(mkPlayer(), { x: 11, y: 17 }, seq([0]));
     expect(result.success).toBe(false);
     expect(result.log).toContain('fumbles');
+  });
+});
+
+describe('checkWinner', () => {
+  it('keeps the game running below the cap and turn limit', () => {
+    expect(checkWinner(14, 7, 4)).toEqual({ isGameOver: false, winner: null });
+  });
+
+  it('ends the game when a team reaches the score cap', () => {
+    expect(checkWinner(WIN_SCORE, 7, 4)).toEqual({ isGameOver: true, winner: TeamSide.HOME });
+    expect(checkWinner(0, WIN_SCORE, 4)).toEqual({ isGameOver: true, winner: TeamSide.AWAY });
+  });
+
+  it('ends the game once the turn limit is passed, awarding the higher score', () => {
+    expect(checkWinner(7, 14, MAX_TURNS + 1)).toEqual({ isGameOver: true, winner: TeamSide.AWAY });
+  });
+
+  it('reports a draw when scores are level at the end', () => {
+    expect(checkWinner(7, 7, MAX_TURNS + 1)).toEqual({ isGameOver: true, winner: null });
+  });
+});
+
+describe('validateSpellCast', () => {
+  const caster = mkPlayer({ id: 'w', team: TeamSide.HOME, position: { x: 5, y: 5 } });
+
+  it('rejects any target beyond the spell range', () => {
+    const enemy = mkPlayer({ id: 'e', team: TeamSide.AWAY, position: { x: 5, y: 11 } });
+    const r = validateSpellCast('FIREBALL', caster, enemy.position, enemy, 4);
+    expect(r.valid).toBe(false);
+    expect(r.reason).toContain('range');
+  });
+
+  it('allows Fireball on an in-range enemy but not an ally or empty tile', () => {
+    const enemy = mkPlayer({ id: 'e', team: TeamSide.AWAY, position: { x: 5, y: 8 } });
+    const ally = mkPlayer({ id: 'a', team: TeamSide.HOME, position: { x: 5, y: 8 } });
+    expect(validateSpellCast('FIREBALL', caster, enemy.position, enemy, 4).valid).toBe(true);
+    expect(validateSpellCast('FIREBALL', caster, ally.position, ally, 4).valid).toBe(false);
+    expect(validateSpellCast('FIREBALL', caster, { x: 5, y: 8 }, undefined, 4).valid).toBe(false);
+  });
+
+  it('requires Blink to land on an empty, on-board tile', () => {
+    const occupant = mkPlayer({ id: 'o', team: TeamSide.AWAY, position: { x: 5, y: 8 } });
+    expect(validateSpellCast('TELEPORT', caster, { x: 5, y: 8 }, undefined, 5).valid).toBe(true);
+    expect(validateSpellCast('TELEPORT', caster, occupant.position, occupant, 5).valid).toBe(false);
+  });
+
+  it('only lets Revitalize clear a stunned ally', () => {
+    const stunnedAlly = mkPlayer({ id: 'sa', team: TeamSide.HOME, isStunned: true, position: { x: 5, y: 6 } });
+    const healthyAlly = mkPlayer({ id: 'ha', team: TeamSide.HOME, isStunned: false, position: { x: 5, y: 6 } });
+    const stunnedEnemy = mkPlayer({ id: 'se', team: TeamSide.AWAY, isStunned: true, position: { x: 5, y: 6 } });
+    expect(validateSpellCast('HEAL', caster, stunnedAlly.position, stunnedAlly, 1).valid).toBe(true);
+    expect(validateSpellCast('HEAL', caster, healthyAlly.position, healthyAlly, 1).valid).toBe(false);
+    expect(validateSpellCast('HEAL', caster, stunnedEnemy.position, stunnedEnemy, 1).valid).toBe(false);
   });
 });
 

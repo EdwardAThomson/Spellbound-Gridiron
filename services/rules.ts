@@ -1,4 +1,4 @@
-import { Position, Player, BOARD_WIDTH, BOARD_HEIGHT } from '../types';
+import { Position, Player, TeamSide, BOARD_WIDTH, BOARD_HEIGHT } from '../types';
 
 // Pure, deterministic game-rules logic extracted from App.tsx and gameUtils.ts.
 //
@@ -62,14 +62,6 @@ export const resolveTackle = (
   };
 };
 
-/**
- * Distance metric currently used for pass difficulty. This preserves the
- * historical floored-Euclidean behaviour; Task 1 reconciles it with the
- * rulebook's documented `2 + manhattan_distance`.
- */
-export const passDistance = (from: Position, to: Position): number =>
-  Math.floor(Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2));
-
 export interface PassResult {
   success: boolean;
   roll: number;
@@ -77,13 +69,17 @@ export interface PassResult {
   log: string;
 }
 
-/** SKL + d6 vs a distance-scaled difficulty; success on roll >= difficulty. */
+/**
+ * SKL + d6 vs `2 + manhattan_distance`; success on roll >= difficulty.
+ * The difficulty metric is Manhattan (grid) distance to match the rulebook
+ * (`GAME_RULES` in utils/contextSerializer.ts) and CLAUDE.md.
+ */
 export const resolvePass = (
   thrower: Player,
   targetPos: Position,
   rng: Rng
 ): PassResult => {
-  const difficulty = 2 + passDistance(thrower.position, targetPos);
+  const difficulty = 2 + manhattanDistance(thrower.position, targetPos);
   const roll = rollDie(rng, 6) + thrower.stats.skill;
   const success = roll >= difficulty;
   return {
@@ -108,4 +104,87 @@ export const scatterPosition = (pos: Position, rng: Rng): Position => {
     x: Math.max(1, Math.min(BOARD_WIDTH - 2, scatterX)),
     y: Math.max(1, Math.min(BOARD_HEIGHT - 2, scatterY)),
   };
+};
+
+// --- Win condition ---------------------------------------------------------
+//
+// The game ends when either team reaches `WIN_SCORE` points (3 touchdowns at
+// 7 points each), or once `MAX_TURNS` full turns have elapsed, whichever comes
+// first. The winner is the higher score at that point; an equal score is a draw
+// (isGameOver true, winner null). Kept pure so App can wire it into both the
+// touchdown path and end-of-turn without duplicating the thresholds.
+
+export const WIN_SCORE = 21;
+export const MAX_TURNS = 16;
+
+export interface GameOutcome {
+  isGameOver: boolean;
+  winner: TeamSide | null;
+}
+
+export const checkWinner = (
+  homeScore: number,
+  awayScore: number,
+  turn: number,
+  winScore: number = WIN_SCORE,
+  maxTurns: number = MAX_TURNS
+): GameOutcome => {
+  const reachedCap = homeScore >= winScore || awayScore >= winScore;
+  const outOfTurns = turn > maxTurns;
+  if (!reachedCap && !outOfTurns) {
+    return { isGameOver: false, winner: null };
+  }
+  let winner: TeamSide | null = null;
+  if (homeScore > awayScore) winner = TeamSide.HOME;
+  else if (awayScore > homeScore) winner = TeamSide.AWAY;
+  return { isGameOver: true, winner };
+};
+
+// --- Spell targeting -------------------------------------------------------
+//
+// Enforces range and target validity for the three spells so the code matches
+// what SPELLS advertises and what the LLM tells players. Range is measured as
+// Manhattan distance from the caster's tile.
+//
+// - Fireball (range 4): must strike an enemy player. Cannot hit an ally or an
+//   empty tile.
+// - Blink    (range 5): must land on an empty, on-board tile. Cannot land on an
+//   occupied square.
+// - Revitalize (range 1): must target a stunned ally. Cannot clear an enemy's
+//   stun or "heal" someone who is not stunned.
+
+export interface SpellValidation {
+  valid: boolean;
+  reason: string;
+}
+
+export const validateSpellCast = (
+  spellKey: string,
+  caster: Player,
+  targetPos: Position,
+  targetPlayer: Player | undefined,
+  range: number
+): SpellValidation => {
+  const dist = manhattanDistance(caster.position, targetPos);
+  if (dist > range) {
+    return { valid: false, reason: `Target out of range (${dist} > ${range}).` };
+  }
+
+  switch (spellKey) {
+    case 'FIREBALL': // Fireball
+      if (!targetPlayer) return { valid: false, reason: 'Fireball needs an enemy target.' };
+      if (targetPlayer.team === caster.team) return { valid: false, reason: 'Fireball cannot target an ally.' };
+      return { valid: true, reason: '' };
+    case 'TELEPORT': // Blink
+      if (!isPositionValid(targetPos)) return { valid: false, reason: 'Blink target is off the board.' };
+      if (targetPlayer) return { valid: false, reason: 'Blink must target an empty square.' };
+      return { valid: true, reason: '' };
+    case 'HEAL': // Revitalize
+      if (!targetPlayer) return { valid: false, reason: 'Revitalize needs an ally target.' };
+      if (targetPlayer.team !== caster.team) return { valid: false, reason: 'Revitalize can only aid allies.' };
+      if (!targetPlayer.isStunned) return { valid: false, reason: 'That ally is not stunned.' };
+      return { valid: true, reason: '' };
+    default:
+      return { valid: true, reason: '' };
+  }
 };

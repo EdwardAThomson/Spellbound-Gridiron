@@ -6,20 +6,23 @@ Title: Spellbound Gridiron
 Premise: A 5v5 turn-based fantasy sports game played on a grid.
 Objective: Move the ball carrier into the opponent's endzone (the last row) to score 7 points.
 
+Winning: The match ends when a team reaches 21 points (3 touchdowns), or after 16 turns, whichever comes first. The higher score wins; a tie is a draw.
+
 Mechanics:
-- Movement: Units move orthogonally. 1 square = 1 Move point.
+- Movement: Units move one square at a time to any of the 8 adjacent tiles (orthogonal or diagonal). 1 square = 1 Move point.
+- Ball pickup: Moving onto the loose ball's tile picks it up automatically (no roll).
 - Tackling: Moving into an opponent initiates a tackle.
-  - Strength vs Strength check.
+  - Strength vs Strength check (STR + d6 each).
   - Success: Defender is Stunned (cannot act next turn) and drops the ball.
   - Failure: Attacker loses turn.
 - Passing: A unit with the ball can throw it to a target tile.
-  - Skill check based on distance.
+  - Skill check: the thrower rolls SKL + d6 and must meet a difficulty of 2 + Manhattan distance to the target tile.
   - Success: Caught by unit at target or lands on ground.
   - Failure: Ball scatters randomly.
-- Magic: Wizards can use Mana to cast spells:
-  - Fireball: Range 4, Cost 3. Stuns target.
-  - Blink: Range 5, Cost 4. Teleport to target.
-  - Revitalize: Range 1, Cost 2. Remove Stun from ally.
+- Magic: Wizards can use Mana to cast spells. Range is the Manhattan distance from the caster and is enforced:
+  - Fireball: Range 4, Cost 3. Stuns an enemy target.
+  - Blink: Range 5, Cost 4. Teleport to an empty target tile.
+  - Revitalize: Range 1, Cost 2. Remove Stun from a stunned ally.
 - Stats:
   - STR (Strength): Combat/Tackling.
   - SKL (Skill): Passing/Catching.

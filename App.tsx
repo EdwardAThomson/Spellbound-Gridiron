@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, INITIAL_MANA } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -13,7 +13,7 @@ import RuleBookModal from './components/RuleBookModal';
 import StartOverlay from './components/StartOverlay';
 import SettingsModal from './components/SettingsModal';
 import AiAssistantPanel from './components/AiAssistantPanel';
-import { ApiKeysProvider, ApiKeysContext } from './context/ApiKeysContext';
+import { ApiKeysContext } from './context/ApiKeysContext';
 import { LLMProvider } from './utils/llmHelper';
 import { DEFAULT_MODELS } from './constants/models';
 
@@ -158,19 +158,48 @@ export default function App() {
         return getAllPlayers().find(p => p.id === gameState.selectedPlayerId);
     }, [gameState.selectedPlayerId, getAllPlayers]);
 
+    // Commentary is batched to one LLM request per action. A single action
+    // (tackle, pass, spell) emits several log lines; firing a request per line
+    // both races the `commentary`/`isAiThinking` slots and sends the LLM stale
+    // pre-action state. Instead `addLog` only appends, and the log lines from an
+    // action are collected and flushed once, on the next tick, from the fresh
+    // post-action state (read via `gameStateRef`, updated after each commit).
+    const gameStateRef = useRef(gameState);
+    useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+
+    const pendingLogsRef = useRef<string[]>([]);
+    const commentaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const addLog = (msg: string) => {
         setGameState(prev => ({
             ...prev,
             gameLog: [...prev.gameLog, msg]
         }));
-        triggerCommentary(msg);
+        queueCommentary(msg);
     };
 
-    const triggerCommentary = async (action: string) => {
+    const queueCommentary = (msg: string) => {
+        pendingLogsRef.current.push(msg);
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        // Small delay so all of an action's synchronous addLog calls collect
+        // together and React has committed the resulting state before we read it.
+        commentaryTimerRef.current = setTimeout(flushCommentary, 50);
+    };
+
+    const flushCommentary = async () => {
+        const lines = pendingLogsRef.current;
+        pendingLogsRef.current = [];
+        commentaryTimerRef.current = null;
+        if (lines.length === 0) return;
+
+        const action = lines.join(' ');
         setIsAiThinking(true);
-        const comment = await generateCommentary(action, gameState, gameProvider, apiKeys, gameModel);
-        setGameState(prev => ({ ...prev, commentary: comment }));
-        setIsAiThinking(false);
+        try {
+            const comment = await generateCommentary(action, gameStateRef.current, gameProvider, apiKeys, gameModel);
+            setGameState(prev => ({ ...prev, commentary: comment }));
+        } finally {
+            setIsAiThinking(false);
+        }
     };
 
     // --- Interaction Handlers ---
@@ -263,7 +292,9 @@ export default function App() {
             movesRemaining: player.movesRemaining - 1
         };
 
-        // Check for Ball Pickup
+        // Check for Ball Pickup.
+        // Ball pickup is automatic with no dice roll (by design): moving onto the
+        // loose ball's tile always picks it up. This is documented in GAME_RULES.
         let newBallPos = gameState.ballPosition;
 
         if (gameState.ballPosition && to.x === gameState.ballPosition.x && to.y === gameState.ballPosition.y) {
@@ -289,10 +320,30 @@ export default function App() {
             }
         }
 
-        updatePlayerState(updatedPlayer, { ballPosition: newBallPos, homeScore: scoreHome, awayScore: scoreAway });
+        // A touchdown can end the match (score cap reached).
+        const outcome = checkWinner(scoreHome, scoreAway, gameState.turn);
 
-        if (touchdown) {
+        updatePlayerState(updatedPlayer, {
+            ballPosition: newBallPos,
+            homeScore: scoreHome,
+            awayScore: scoreAway,
+            isGameOver: outcome.isGameOver,
+            winner: outcome.winner,
+        });
+
+        if (outcome.isGameOver) {
+            announceGameOver(outcome.winner);
+        } else if (touchdown) {
             handleTouchdown();
+        }
+    };
+
+    const announceGameOver = (winner: TeamSide | null) => {
+        if (winner === null) {
+            addLog("Full time! The match ends in a draw.");
+        } else {
+            const name = winner === TeamSide.HOME ? gameState.homeTeam.name : gameState.awayTeam.name;
+            addLog(`Full time! ${name} win the match!`);
         }
     };
 
@@ -350,31 +401,40 @@ export default function App() {
     const handleCastSpell = (player: Player, spellKey: string, targetPos: Position) => {
         const spell = SPELLS[spellKey as keyof typeof SPELLS];
 
-        if (player.mana >= spell.cost) {
-            addLog(`${player.name} casts ${spell.name} at ${targetPos.x},${targetPos.y}!`);
-            // Simplistic spell effect logic for now
-            const targetPlayer = getPlayerAtPosition(targetPos, getAllPlayers());
-
-            let updatedTarget = targetPlayer ? { ...targetPlayer } : null;
-
-            if (spellKey === 'FIREBALL' && updatedTarget) {
-                updatedTarget.isStunned = true;
-                addLog(`${updatedTarget.name} was knocked down by the fireball!`);
-            } else if (spellKey === 'HEAL' && updatedTarget) {
-                updatedTarget.isStunned = false;
-                addLog(`${updatedTarget.name} is back in the fight!`);
-            } else if (spellKey === 'TELEPORT') {
-                player.position = targetPos; // Instant move
-                addLog(`${player.name} blinks across reality!`);
-            }
-
-            const updates = [{ ...player, mana: player.mana - spell.cost, actionTaken: true }];
-            if (updatedTarget) updates.push(updatedTarget);
-            updatePlayerState(updates);
-
-        } else {
+        if (player.mana < spell.cost) {
             addLog("Not enough mana!");
+            return;
         }
+
+        // Enforce range and target validity before anything is spent.
+        const targetPlayer = getPlayerAtPosition(targetPos, getAllPlayers());
+        const validation = validateSpellCast(spellKey, player, targetPos, targetPlayer, spell.range);
+        if (!validation.valid) {
+            addLog(validation.reason);
+            return;
+        }
+
+        addLog(`${player.name} casts ${spell.name} at ${targetPos.x},${targetPos.y}!`);
+
+        // Copy both caster and target so we never mutate state in place.
+        const updatedCaster: Player = { ...player, mana: player.mana - spell.cost, actionTaken: true };
+        let updatedTarget = targetPlayer ? { ...targetPlayer } : null;
+
+        if (spellKey === 'FIREBALL' && updatedTarget) {
+            updatedTarget.isStunned = true;
+            updatedTarget.movesRemaining = 0;
+            addLog(`${updatedTarget.name} was knocked down by the fireball!`);
+        } else if (spellKey === 'HEAL' && updatedTarget) {
+            updatedTarget.isStunned = false;
+            addLog(`${updatedTarget.name} is back in the fight!`);
+        } else if (spellKey === 'TELEPORT') {
+            updatedCaster.position = { ...targetPos }; // Copy, not in-place mutation.
+            addLog(`${player.name} blinks across reality!`);
+        }
+
+        const updates = [updatedCaster];
+        if (updatedTarget) updates.push(updatedTarget);
+        updatePlayerState(updates);
     };
 
     const handleTouchdown = () => {
@@ -428,6 +488,9 @@ export default function App() {
     };
 
     const endTurn = () => {
+        if (gameState.isGameOver) return;
+
+        let outcome = checkWinner(0, 0, 0); // placeholder; recomputed from committed state below
         setGameState(prev => {
             const nextTeam = prev.currentTeam === TeamSide.HOME ? TeamSide.AWAY : TeamSide.HOME;
 
@@ -442,6 +505,7 @@ export default function App() {
             });
 
             const newTurnNumber = nextTeam === TeamSide.HOME ? prev.turn + 1 : prev.turn;
+            outcome = checkWinner(prev.homeTeam.score, prev.awayTeam.score, newTurnNumber);
 
             return {
                 ...prev,
@@ -450,9 +514,41 @@ export default function App() {
                 selectedPlayerId: null,
                 homeTeam: nextTeam === TeamSide.HOME ? refreshTeam(prev.homeTeam) : prev.homeTeam,
                 awayTeam: nextTeam === TeamSide.AWAY ? refreshTeam(prev.awayTeam) : prev.awayTeam,
+                isGameOver: outcome.isGameOver,
+                winner: outcome.winner,
             };
         });
-        addLog(`Turn Ending. It is now the ${gameState.currentTeam === TeamSide.HOME ? 'AWAY' : 'HOME'} team's turn.`);
+
+        if (outcome.isGameOver) {
+            announceGameOver(outcome.winner);
+        } else {
+            addLog(`Turn Ending. It is now the ${gameState.currentTeam === TeamSide.HOME ? 'AWAY' : 'HOME'} team's turn.`);
+        }
+        cancelTargeting();
+    };
+
+    const handleNewGame = () => {
+        // Drop any queued commentary from the finished match.
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+
+        setGameState(prev => ({
+            turn: 1,
+            currentTeam: TeamSide.HOME,
+            homeTeam: { ...INITIAL_HOME_TEAM, players: setupTeam(TeamSide.HOME, 1, 1) },
+            awayTeam: { ...INITIAL_AWAY_TEAM, players: setupTeam(TeamSide.AWAY, 16, -1) },
+            selectedPlayerId: null,
+            ballPosition: { x: 6, y: 9 },
+            boardWidth: BOARD_WIDTH,
+            boardHeight: BOARD_HEIGHT,
+            terrain: prev.terrain,
+            weather: prev.weather,
+            gameLog: ["A new match begins! The mystical gates open once more."],
+            commentary: "Welcome back to Spellbound Gridiron!",
+            isGameOver: false,
+            winner: null,
+        }));
         cancelTargeting();
     };
 
@@ -506,8 +602,7 @@ export default function App() {
     const terrainInfo = TERRAIN_CONFIG[gameState.terrain];
 
     return (
-        <ApiKeysProvider>
-            <div className="min-h-screen bg-stone-900 text-gray-100 flex flex-col md:flex-row overflow-hidden">
+        <div className="min-h-screen bg-stone-900 text-gray-100 flex flex-col md:flex-row overflow-hidden">
 
                 {/* LEFT PANEL: HUD & CONTROLS */}
                 <div className="w-full md:w-80 p-4 flex flex-col border-r border-white/10 bg-stone-950 z-10 shadow-2xl">
@@ -722,7 +817,30 @@ export default function App() {
                     chatModel={chatModel}
                     setChatModel={setChatModel}
                 />
+
+                {/* END-OF-GAME SCREEN (blocks all board/HUD input) */}
+                {gameState.isGameOver && (
+                    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
+                        <div className="text-center animate-in fade-in zoom-in duration-500">
+                            <div className="text-6xl mb-4">🏆</div>
+                            <h1 className="text-5xl font-fantasy text-amber-200 uppercase tracking-tighter mb-3">
+                                {gameState.winner === null ? "It's a Draw!" : `${(gameState.winner === TeamSide.HOME ? gameState.homeTeam : gameState.awayTeam).name} Win!`}
+                            </h1>
+                            <p className="text-stone-300 font-mono text-sm tracking-widest mb-2">Full Time</p>
+                            <p className="text-2xl font-bold font-fantasy mb-10">
+                                <span className="text-blue-400">{gameState.homeTeam.score}</span>
+                                <span className="text-gray-600 text-base mx-3">VS</span>
+                                <span className="text-red-400">{gameState.awayTeam.score}</span>
+                            </p>
+                            <button
+                                onClick={handleNewGame}
+                                className="px-12 py-5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
+                            >
+                                New Game
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
-        </ApiKeysProvider>
     );
 }

@@ -4,14 +4,14 @@ Spellbound Gridiron is broadly inspired by Blood Bowl, but with our own twist. T
 
 ## Known issues (from code review, 2026-08-09)
 
-Ordered roughly by severity.
+All six resolved in Task 1 (2026-08-10).
 
-- [ ] **Cloud API keys never reach the game engine.** `App` reads `useContext(ApiKeysContext)` (`App.tsx`), but `ApiKeysProvider` is rendered inside App's own JSX, so App sits outside the provider and always sees empty default keys. Commentary and team-name generation fail for cloud providers regardless of Settings or `.env`. Fix: move the provider wrapper into `index.tsx`. (The chatbot works because `AiAssistantPanel` is inside the provider, which masks the bug.)
-- [ ] **Commentary uses stale state and fires once per log line.** `addLog` calls `triggerCommentary`, which reads `gameState` from a stale closure, so the LLM sees the pre-action board. A single tackle emits 2-3 log lines, spawning that many concurrent LLM calls racing for the commentary slot and `isAiThinking`. Needs a design decision: debounce, or batch logs per action.
-- [ ] **The game never ends.** `isGameOver` and `winner` exist in `GameState` but nothing sets them; touchdowns reset for kickoff forever. Decide on a win condition (turn limit or score cap) and wire it up.
-- [ ] **Spell ranges are not enforced.** `SPELLS` defines ranges (Fireball 4, Blink 5, Revitalize 1) and the LLM is told about them, but `handleCastSpell` never checks distance or target validity: Fireball works across the map, Blink can land on an occupied tile, and Revitalize can clear an enemy's stun.
-- [ ] **Rules sent to the LLM do not match the code.** `GAME_RULES` in `utils/contextSerializer.ts` says movement is orthogonal, but `isAdjacent` allows diagonals. Docs describe pass difficulty as `2 + manhattan_distance`, but `resolvePass` uses Euclidean distance. The assistant confidently tells players wrong rules; pick one behaviour and sync code, `GAME_RULES`, and CLAUDE.md.
-- [ ] **Minor cleanups.** `TELEPORT` mutates `player.position` in place in `handleCastSpell` instead of copying; ball pickup is automatic with no roll (confirm whether intentional).
+- [x] **Cloud API keys never reach the game engine.** Fixed: `ApiKeysProvider` now wraps `<App />` in `index.tsx`, so `App`'s `useContext(ApiKeysContext)` sees the real keys.
+- [x] **Commentary uses stale state and fires once per log line.** Fixed: `addLog` only appends; the log lines from an action are batched and flushed as a single `generateCommentary` request on the next tick, reading fresh post-action state via a ref.
+- [x] **The game never ends.** Fixed: `checkWinner` (`services/rules.ts`) ends the match at 21 points or after 16 turns; `App` wires it into the touchdown and end-of-turn paths and shows an input-blocking end-of-game screen with a New Game button.
+- [x] **Spell ranges are not enforced.** Fixed: `validateSpellCast` (`services/rules.ts`) enforces Manhattan range and target validity (Fireball hits an enemy only, Blink lands on an empty on-board tile only, Revitalize clears a stunned ally only). `handleCastSpell` rejects invalid casts before spending mana.
+- [x] **Rules sent to the LLM do not match the code.** Fixed: settled on diagonal (king's-move) movement and `2 + manhattan_distance` pass difficulty; `resolvePass`, `GAME_RULES`, and CLAUDE.md are now in sync.
+- [x] **Minor cleanups.** Fixed: `TELEPORT` now copies the target position instead of mutating `player.position`; automatic (roll-free) ball pickup is confirmed intentional and documented in `GAME_RULES`.
 
 ## Match variety
 

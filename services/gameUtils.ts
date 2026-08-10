@@ -18,7 +18,15 @@ const defaultRng: Rng = () => Math.random();
 export const INITIAL_MANA = 5;
 
 // rng-free helpers are re-exported unchanged from the pure module.
-export { isPositionValid, isAdjacent, getPlayerAtPosition } from "./rules";
+export {
+  isPositionValid,
+  isAdjacent,
+  getPlayerAtPosition,
+  checkWinner,
+  validateSpellCast,
+  WIN_SCORE,
+  MAX_TURNS,
+} from "./rules";
 
 /** Manhattan distance (kept under its historical name for existing callers). */
 export const getDistance = manhattanDistance;

@@ -25,3 +25,46 @@ Verify: all 5 predicates pass, including the full `npm run check` gate (14 Vites
 
 Note for next step: Task 0 is complete and green. Carry-forward for Task 1: put new gameplay logic in `services/rules.ts` (rng-injected) with coverage in `services/rules.test.ts`; `gameUtils.ts` binds real `Math.random`. When Task 1 reconciles pass difficulty to `2 + manhattan`, the `rules.test.ts` assertion locking in floored-Euclidean distance must be updated. e2e server is pinned to port 51789 `--strictPort` because 3000 is taken by another running app. Work left in the worktree; no git writes made by me.
 
+## 2026-08-10 — i_81e329846244 — Task 1: fix all six ROADMAP 'Known issues' — wrap App with ApiKeysProvider in index.tsx, batch one commentary request per action from post-action state, add a documented win condition with an input-blocking end-of-game screen, enforce spell range/target validity in services/rules.ts, sync diagonal movement and 2+manhattan pass difficulty across code and rule text, and clean up the TELEPORT mutation with documented ball pickup.
+
+Task 1: fix all six ROADMAP "Known issues"
+
+Wrap `<App />` with `ApiKeysProvider` in index.tsx (removing the in-App
+wrapper) so `App`'s `useContext(ApiKeysContext)` sees real keys and cloud
+commentary/team-name generation work.
+
+Batch commentary to one LLM request per action: `addLog` now only appends
+log lines; the lines from an action are collected and flushed once on the
+next tick via `flushCommentary`, reading fresh post-action state through
+`gameStateRef` instead of a stale closure, and joining the lines into a
+single `generateCommentary` call.
+
+Add a documented win condition: `checkWinner` in services/rules.ts ends the
+match at `WIN_SCORE` (21) points or after `MAX_TURNS` (16) turns, returning
+the higher-scoring side or a draw. App wires it into both the touchdown and
+end-of-turn paths and shows an input-blocking end-of-game screen with a New
+Game button (`handleNewGame` resets state and clears queued commentary).
+
+Enforce spell range and target validity via `validateSpellCast` in
+services/rules.ts: Fireball (range 4) must hit an enemy, Blink (range 5)
+must land on an empty on-board tile, Revitalize (range 1) must clear a
+stunned ally. `handleCastSpell` rejects invalid casts before spending mana.
+
+Sync rules with code: settle on diagonal (king's-move) movement and
+`2 + manhattan_distance` pass difficulty. `resolvePass` now uses Manhattan
+distance (the floored-Euclidean `passDistance` helper is removed), and
+GAME_RULES (utils/contextSerializer.ts) plus CLAUDE.md are updated to match.
+
+Clean up TELEPORT: copy the target position instead of mutating
+`player.position` in place, and copy both caster and target players. Document
+automatic (roll-free) ball pickup as intentional in GAME_RULES.
+
+Extend services/rules.test.ts with coverage for `checkWinner` and
+`validateSpellCast`, and update the pass-difficulty test to assert
+`2 + manhattan`. Re-export the new pure helpers through services/gameUtils.ts.
+ROADMAP marks all six known issues resolved. 22 unit tests pass.
+
+---
+
+Note for next step: Task 1 landed. All four verify checks passed (ApiKeysProvider in index.tsx; rules.ts has fireball/blink/revitalize + range and no Math.random; contextSerializer has 2+manhattan pass difficulty; npx vitest run = 22 passed). 8 files changed (+340 -72), all modifications: App.tsx, index.tsx, services/rules.ts, services/gameUtils.ts, services/rules.test.ts, utils/contextSerializer.ts, CLAUDE.md, ROADMAP.md. No scope creep into Task 2+ (no save/load, terrain art, or README terrain/weather edits). e2e was not run (not in this item's verify list); it would run under `npm run check` at a later gate. Next up is Task 2 (versioned localStorage save/load with exact round-trip fidelity).
+
