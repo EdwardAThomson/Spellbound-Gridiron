@@ -11,6 +11,8 @@ import {
   checkWinner,
   validateSpellCast,
   weatherPassModifier,
+  weatherMovePenalty,
+  effectiveMove,
   isHazard,
   generateLavaHazards,
   resolveTerrainStep,
@@ -191,6 +193,26 @@ describe('weatherPassModifier', () => {
     const blizzard = resolvePass(mkPlayer(), { x: 0, y: 0 }, seq([0.99]), weatherPassModifier(Weather.BLIZZARD));
     expect(clear.difficulty).toBe(2);
     expect(blizzard.difficulty).toBe(4);
+  });
+});
+
+describe('weatherMovePenalty / effectiveMove', () => {
+  it('only a Blizzard costs a Move point', () => {
+    expect(weatherMovePenalty(Weather.CLEAR)).toBe(0);
+    expect(weatherMovePenalty(Weather.RAIN)).toBe(0);
+    expect(weatherMovePenalty(Weather.METEOR_SHOWER)).toBe(0);
+    expect(weatherMovePenalty(Weather.BLIZZARD)).toBe(1);
+  });
+
+  it('trims every player -1 Move in a Blizzard, clamped at 1', () => {
+    // Clear/Rain leave the base Move untouched.
+    expect(effectiveMove(8, Weather.CLEAR)).toBe(8);
+    expect(effectiveMove(8, Weather.RAIN)).toBe(8);
+    // Blizzard shaves one square off, whatever the role's base Move.
+    expect(effectiveMove(8, Weather.BLIZZARD)).toBe(7);
+    expect(effectiveMove(4, Weather.BLIZZARD)).toBe(3);
+    // A unit already at 1 Move stays at 1 (never snowed to a standstill).
+    expect(effectiveMove(1, Weather.BLIZZARD)).toBe(1);
   });
 });
 

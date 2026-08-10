@@ -1,8 +1,8 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_1aabc755bfaa
-  generated_at: 2026-08-10T01:10:15Z
+  run_id: r_10968a13b003
+  generated_at: 2026-08-10T02:06:27Z
   regenerable: true
 ---
 
@@ -137,4 +137,16 @@ Verify: both checklist commands passed (exit 0). The grep gate confirms blizzard
 ---
 
 Note for the next step: Task 4 complete and verified, both verify commands green (grep gate clean; `npm run check` passes unit + e2e). 12 files staged in the worktree, nothing committed by me. This is the final task (0-4) in the work order; no follow-up implementation pending. Left for the harness to commit.
+
+## 2026-08-10 — i_50727e35c8f6 — Task 1: give Blizzard a -1 Move penalty for all players (in addition to +2 pass difficulty) in the pure rules layer, unit-test it, and make GAME_RULES, RuleBookModal, README (and CLAUDE.md) all describe Blizzard as -1 Move and +2 pass difficulty.
+
+Task 1: Blizzard now applies a -1 Move penalty to all players in addition to its +2 pass difficulty.
+
+The pure rules layer gains `weatherMovePenalty` (returns 1 only for Blizzard) and `effectiveMove` (base Move minus penalty, clamped to a minimum of 1) in `services/rules.ts`, both re-exported through `services/gameUtils.ts`. `App.tsx` applies `effectiveMove` when seeding opening-turn moves in `setupTeam` and when refreshing `movesRemaining` each turn.
+
+Unit tests cover both helpers across Clear/Rain/Meteor/Blizzard weathers and the clamp at 1. GAME_RULES (`utils/contextSerializer.ts`), the Start overlay weather blurb, README, and CLAUDE.md all describe Blizzard as +2 pass difficulty and -1 Move.
+
+Verify passed (exit 0, both command blocks): the grep checks find `blizzard` and the move-penalty wording across `services/rules.ts`, the test file, README, `contextSerializer.ts`, and `components/`; unit and e2e suites are green.
+
+Note for next step: Task 1 is complete and green in the worktree. The verify commands `cd` into the main repo path, so they only pass once the harness lands this diff. Next up is Task 2 (XP-and-progression system).
 

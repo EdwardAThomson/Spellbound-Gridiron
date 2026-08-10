@@ -33,6 +33,8 @@ export {
   validateSpellCast,
   isHazard,
   weatherPassModifier,
+  weatherMovePenalty,
+  effectiveMove,
   WIN_SCORE,
   MAX_TURNS,
   LAVA_HAZARD_COUNT,

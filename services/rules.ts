@@ -206,6 +206,8 @@ export const validateSpellCast = (
 // - Ice   (Frozen Wastes): a step slides one extra tile in the travel direction
 //                        when that tile is open.
 // - Rain / Blizzard:     raise pass difficulty (`weatherPassModifier`).
+//                        Blizzard also costs every player 1 Move point per turn
+//                        (`weatherMovePenalty` / `effectiveMove`).
 // - Meteor Shower:       a meteor is telegraphed one round, then strikes its
 //                        tile, knocking down whoever stands there.
 
@@ -226,6 +228,23 @@ export const weatherPassModifier = (weather: Weather): number => {
       return 0;
   }
 };
+
+/**
+ * Move-point penalty every player suffers from the current weather. Only a
+ * Blizzard bites here: driving snow costs every player 1 Move point per turn,
+ * on top of the +2 pass difficulty from `weatherPassModifier`. Returned as a
+ * positive magnitude to subtract from a unit's base Move.
+ */
+export const weatherMovePenalty = (weather: Weather): number =>
+  weather === Weather.BLIZZARD ? 1 : 0;
+
+/**
+ * A player's effective Move for the turn given the weather. The Blizzard
+ * penalty never drops a unit below 1, so a snowed-in player can still shuffle a
+ * single square.
+ */
+export const effectiveMove = (baseMove: number, weather: Weather): number =>
+  Math.max(1, baseMove - weatherMovePenalty(weather));
 
 /** True when `pos` is one of the seeded lava hazard tiles. */
 export const isHazard = (pos: Position, hazards: Position[]): boolean =>

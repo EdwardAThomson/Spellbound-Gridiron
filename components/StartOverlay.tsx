@@ -23,7 +23,7 @@ const TERRAIN_ORDER: TerrainType[] = [
 const WEATHER_ORDER: { weather: Weather; label: string; effect: string }[] = [
     { weather: Weather.CLEAR, label: 'Clear', effect: 'Perfect conditions. No penalties.' },
     { weather: Weather.RAIN, label: 'Rain', effect: 'Slippery ball: passes are +1 harder.' },
-    { weather: Weather.BLIZZARD, label: 'Blizzard', effect: 'Driving snow: passes are +2 harder.' },
+    { weather: Weather.BLIZZARD, label: 'Blizzard', effect: 'Driving snow: passes +2 harder and every player -1 Move.' },
     { weather: Weather.METEOR_SHOWER, label: 'Meteor Shower', effect: 'Meteors fall: a tile is telegraphed one round, then struck, knocking down anyone on it.' },
 ];
 

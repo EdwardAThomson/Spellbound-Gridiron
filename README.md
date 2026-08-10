@@ -68,7 +68,7 @@ Pick the pitch and the sky on the start screen; both have real mechanical effect
 
 -   **Clear**: No penalty.
 -   **Rain**: Wet ball; passes are +1 harder.
--   **Blizzard**: Driving snow; passes are +2 harder.
+-   **Blizzard**: Driving snow; passes are +2 harder and every player suffers -1 Move (one fewer square per turn, minimum 1).
 -   **Meteor Shower**: A meteor tile is telegraphed one full round (shown with a ☄️), then strikes it, knocking down anyone standing there and jarring the ball loose. Clear the tile before it lands.
 
 ## Features

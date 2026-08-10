@@ -31,7 +31,7 @@ Mechanics:
 - Weather: The sky changes the odds each match.
   - Clear: no penalty.
   - Rain: wet ball - pass difficulty +1.
-  - Blizzard: driving snow - pass difficulty +2.
+  - Blizzard: driving snow - pass difficulty +2, and every player suffers -1 Move (each unit gets one fewer square per turn, minimum 1).
   - Meteor Shower: a meteor tile is telegraphed one full round, then strikes it, knocking down anyone standing there and jarring the ball loose.
 - Stats:
   - STR (Strength): Combat/Tackling.

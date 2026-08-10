@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, INITIAL_MANA } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -88,21 +88,24 @@ export default function App() {
     const [showSpellMenu, setShowSpellMenu] = useState(false);
 
     // --- Helpers ---
-    const setupTeam = (side: TeamSide, startY: number, direction: number) => {
+    const setupTeam = (side: TeamSide, startY: number, direction: number, weather: Weather) => {
         const players: Player[] = [];
         // Formation: 5v5
         const roles = [PlayerRole.LINEMAN, PlayerRole.BLITZER, PlayerRole.QUARTERBACK, PlayerRole.CATCHER, PlayerRole.WIZARD];
         const xPos = [2, 4, 6, 8, 10]; // Spread out
 
         roles.forEach((role, index) => {
-            players.push(createPlayer(
+            const player = createPlayer(
                 `${side}-${index}`,
                 `${role} ${index + 1}`,
                 role,
                 side,
                 xPos[index],
                 startY + (direction * (role === PlayerRole.LINEMAN ? 2 : 0)) // Stagger formation slightly
-            ));
+            );
+            // Apply the weather's Move penalty to the opening turn (Blizzard -1).
+            player.movesRemaining = effectiveMove(player.stats.move, weather);
+            players.push(player);
         });
         return players;
     };
@@ -136,13 +139,13 @@ export default function App() {
                 ...prev.homeTeam,
                 name: 'Elven Vanguard',
                 race: 'High Elves',
-                players: setupTeam(TeamSide.HOME, 1, 1)
+                players: setupTeam(TeamSide.HOME, 1, 1, prev.weather)
             },
             awayTeam: {
                 ...prev.awayTeam,
                 name: 'Orc Bashers',
                 race: 'Dark Orcs',
-                players: setupTeam(TeamSide.AWAY, 16, -1)
+                players: setupTeam(TeamSide.AWAY, 16, -1, prev.weather)
             },
             gameLog: ["The mystical gates open! The match begins.", ...prev.gameLog]
         }));
@@ -543,7 +546,8 @@ export default function App() {
                 ...team,
                 players: team.players.map(p => ({
                     ...p,
-                    movesRemaining: p.stats.move,
+                    // Blizzard shaves a Move point off every player each turn.
+                    movesRemaining: effectiveMove(p.stats.move, prev.weather),
                     actionTaken: false,
                     isStunned: false
                 }))
