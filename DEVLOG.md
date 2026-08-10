@@ -68,3 +68,38 @@ ROADMAP marks all six known issues resolved. 22 unit tests pass.
 
 Note for next step: Task 1 landed. All four verify checks passed (ApiKeysProvider in index.tsx; rules.ts has fireball/blink/revitalize + range and no Math.random; contextSerializer has 2+manhattan pass difficulty; npx vitest run = 22 passed). 8 files changed (+340 -72), all modifications: App.tsx, index.tsx, services/rules.ts, services/gameUtils.ts, services/rules.test.ts, utils/contextSerializer.ts, CLAUDE.md, ROADMAP.md. No scope creep into Task 2+ (no save/load, terrain art, or README terrain/weather edits). e2e was not run (not in this item's verify list); it would run under `npm run check` at a later gate. Next up is Task 2 (versioned localStorage save/load with exact round-trip fidelity).
 
+## 2026-08-10 — i_0ccebc7d2a4a — Task 2: add versioned localStorage save/load — persist full GameState (plus hasGameStarted) under a versioned key, add Save/Load/New Game controls in the left panel, guarantee exact round-trip fidelity, and handle corrupt/missing saves gracefully without autosaving over the slot.
+
+Task 2: add versioned localStorage save/load
+
+Persist the full GameState plus the UI-level hasGameStarted flag under a
+single versioned localStorage key, with explicit Save/Load/New Game controls
+in the left panel and exact round-trip fidelity.
+
+- services/saveGame.ts: new module with a versioned JSON envelope
+  (SAVE_VERSION 1, SAVE_KEY 'spellbound_gridiron_save_v1'). serializeSave /
+  deserializeSave / saveGame / loadGame / hasSave take an injected
+  KeyValueStore (defaulting to browser localStorage) so the pure logic is
+  unit-testable in node. deserializeSave never throws: missing, non-JSON,
+  wrong-version, and structurally broken snapshots all degrade to
+  { ok: false, error } with a distinct message, and a failed load is
+  read-only so it never clobbers an existing valid save.
+- App.tsx: wire handleSave / handleLoad plus a logSystem helper that appends
+  save/load feedback to the log without firing an LLM commentary request.
+  Save reads gameStateRef.current so any in-flight update is captured; Load
+  clears queued commentary, resets the thinking flag, and restores
+  hasGameStarted. There is no autosave, so a running match never overwrites
+  the slot on its own. Adds a Save / Load / New Game button row in the left
+  panel.
+- services/saveGame.test.ts: round-trip fidelity (including held ball /
+  null ballPosition and a finished game), versioned-key/version-tag checks,
+  and graceful handling of missing, non-JSON, wrong-version, and broken
+  saves.
+
+Verify: both greps pass (localStorage in services/*.ts; Save/Load button
+labels in App.tsx) and npx vitest run reports 31 passed across 2 files.
+
+---
+
+Note for next step: Task 2 is complete in the worktree (M App.tsx, new services/saveGame.ts and services/saveGame.test.ts, +374). Both verify commands passed: the greps match, and `npx vitest run` reports 31 passing tests across 2 files. Save/load is additive UI only with no gameplay-rule or GAME_RULES changes, so e2e was not run and docs were left untouched. Ready for the harness to commit; next up is Task 3 (inline per-terrain SVG art in BoardTile).
+

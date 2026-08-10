@@ -16,6 +16,7 @@ import AiAssistantPanel from './components/AiAssistantPanel';
 import { ApiKeysContext } from './context/ApiKeysContext';
 import { LLMProvider } from './utils/llmHelper';
 import { DEFAULT_MODELS } from './constants/models';
+import { saveGame, loadGame } from './services/saveGame';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -552,6 +553,41 @@ export default function App() {
         cancelTargeting();
     };
 
+    // A system/meta message (save/load feedback) that appends to the log without
+    // firing an LLM commentary request, unlike `addLog`.
+    const logSystem = (msg: string) => {
+        setGameState(prev => ({ ...prev, gameLog: [...prev.gameLog, msg] }));
+    };
+
+    // --- Save / Load ---
+    // Explicit only: there is no autosave, so a running match never overwrites
+    // the slot on its own. Save persists the whole GameState (read fresh from
+    // the ref so any in-flight update is included) plus `hasGameStarted`.
+    const handleSave = () => {
+        const result = saveGame(gameStateRef.current, hasGameStarted);
+        logSystem(result.ok ? '💾 Game saved.' : `Save failed: ${result.error}`);
+    };
+
+    const handleLoad = () => {
+        const result = loadGame();
+        if (!result.ok || !result.gameState) {
+            logSystem(`Load failed: ${result.error}`);
+            return;
+        }
+
+        // Drop any queued commentary tied to the outgoing match.
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+
+        setHasGameStarted(result.hasGameStarted ?? true);
+        setGameState({
+            ...result.gameState,
+            gameLog: [...result.gameState.gameLog, '📂 Saved game loaded.'],
+        });
+        cancelTargeting();
+    };
+
     // --- Rendering ---
 
     const renderBoard = () => {
@@ -753,6 +789,25 @@ export default function App() {
                     >
                         End Turn
                     </button>
+
+                    {/* SAVE / LOAD / NEW GAME */}
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                        <button
+                            onClick={handleSave}
+                            title="Save the current match to this browser"
+                            className="py-2 bg-stone-800 hover:bg-stone-700 border border-white/10 rounded text-[11px] font-bold uppercase tracking-widest text-emerald-300 hover:text-emerald-200 transition-colors"
+                        >Save</button>
+                        <button
+                            onClick={handleLoad}
+                            title="Restore the last saved match"
+                            className="py-2 bg-stone-800 hover:bg-stone-700 border border-white/10 rounded text-[11px] font-bold uppercase tracking-widest text-sky-300 hover:text-sky-200 transition-colors"
+                        >Load</button>
+                        <button
+                            onClick={handleNewGame}
+                            title="Reset the board for a fresh match"
+                            className="py-2 bg-stone-800 hover:bg-stone-700 border border-white/10 rounded text-[11px] font-bold uppercase tracking-widest text-amber-300 hover:text-amber-200 transition-colors"
+                        >New Game</button>
+                    </div>
 
                     <button
                         onClick={() => setShowRules(true)}
