@@ -1,8 +1,8 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_10968a13b003
-  generated_at: 2026-08-10T02:06:27Z
+  run_id: r_df5df1c84aa4
+  generated_at: 2026-08-10T14:25:38Z
   regenerable: true
 ---
 
@@ -165,4 +165,16 @@ Tests: new unit coverage for `levelForXp`, `applyLevelBump`, and `awardXp` (no-o
 Verify passed (exit 0, all 3 predicates); `npm run check` green — 60 unit tests + 2 e2e.
 
 Note for next step (Task 3 — persistent named-slot rosters): `xp`/`level` already round-trip through save/load; carry these plus the stat bumps in `player.stats` into roster persistence. Follow the versioned-envelope pattern in `services/saveGame.ts` for a separate roster-storage module. `BoardTile` exposes `data-testid="tile-x-y"` and the unit card exposes `unit-xp`/`unit-progression`, reusable for a rematch e2e.
+
+## 2026-08-10 — i_2f78d838f790 — Add pure, rng-injected campaign logic in services/campaign.ts: a 4-team double round-robin fixture generator, 3-1-0 standings computation, a non-LLM rules-based match simulator that derives a deterministic score from team quality for a fixed rng, and versioned localStorage serialize/deserialize helpers that degrade gracefully on corrupt or missing data; add services/campaign.test.ts asserting the fixture set is non-empty and correctly sized (12 fixtures for 4 teams), the simulator returns a deterministic score for a fixed rng, and corrupt input degrades rather than throws.
+
+Add pure campaign league logic in services/campaign.ts and cover it in services/campaign.test.ts.
+
+Implements a rng-injected 4-team double round-robin: generateFixtures (circle method, 12 fixtures, even-team guard), computeStandings (3-1-0, sorted by points then goal difference then points-for then id), simulateMatch (non-LLM quality-driven resolver, deterministic per seed, scores in touchdown points capped at 3x7), teamQuality, and the season helpers createCampaign/recordResult/isSeasonComplete. Persistence is a versioned localStorage envelope (CAMPAIGN_KEY, CAMPAIGN_VERSION=1) with serialize/deserialize/save/loadCampaign that degrade on missing, non-JSON, wrong-version or structurally broken data rather than throwing. The store is injected via KeyValueStore so it stays node-testable.
+
+Tests cover fixture size and pairings, per-round scheduling, odd-count rejection, deterministic and capped simulator scores, stronger-team bias, teamQuality averaging and empty-squad floor, 3-1-0 standings and unplayed-fixture handling, the season lifecycle, and persistence round-trip plus every degradation path.
+
+Verify passes: `services/campaign.test.ts` — exit 0, all commands green (18/18). Full unit suite reported 170/170 by EXECUTE with no regressions.
+
+Note for next step: campaign logic is in place and green. Downstream UI-wiring items remain per the goal (campaign hub UI, playing player fixtures as real matches, season-complete/new-season flow, e2e coverage) plus reflecting the campaign in GAME_RULES/Help/README/CLAUDE.md. CampaignTeam carries a flat `quality` number, not full rosters, so revisit if AI teams need to progress across seasons.
 
