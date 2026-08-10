@@ -14,6 +14,22 @@ import { ROLE_STATS } from '../constants';
 /** A source of randomness returning a float in [0, 1), as the runtime rng does. */
 export type Rng = () => number;
 
+/**
+ * A small, fast, deterministic PRNG (mulberry32): a given seed always yields the
+ * same stream of floats in [0, 1). Use it wherever a reproducible `Rng` is
+ * wanted (e.g. simulating a campaign fixture from a stable seed) instead of the
+ * runtime `Math.random`, which cannot be reproduced.
+ */
+export const seededRng = (seed: number): Rng => {
+  let state = seed | 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
 /** Roll a single die with `sides` faces using the injected rng. */
 export const rollDie = (rng: Rng, sides: number = 6): number =>
   Math.floor(rng() * sides) + 1;

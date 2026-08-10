@@ -1,8 +1,8 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_df5df1c84aa4
-  generated_at: 2026-08-10T14:25:38Z
+  run_id: r_a14502efa867
+  generated_at: 2026-08-10T21:21:43Z
   regenerable: true
 ---
 
@@ -297,4 +297,32 @@ Verify-only item confirmed green; no code changes required.
 npm run check passes end to end: Vitest 108/108 across 5 files (including campaign.test.ts and tutorial.test.ts) and Playwright 9/9 (including the four new specs campaign, help, menu, tutorial, plus the updated existing specs). Smoke runs with no API keys, so no test calls a real LLM.
 
 Worktree is intentionally unmodified (staged diff: 0 files); nothing needed fixing.
+
+## 2026-08-10 — i_b621aaee508a — Add a seeded PRNG helper in the services layer and make campaign fixture simulation deterministic (derive each simulated fixture's rng from season + fixture identity, removing App.tsx's simulateMatch(..., Math.random) call); add a determinism/reproducibility unit test and correct the README reproducibility claim.
+
+i_b621aaee508a: Seed campaign fixture simulation deterministically
+
+Make AI-vs-AI campaign simulation honestly reproducible by deriving each
+fixture's rng from persisted data instead of the wall clock.
+
+- Add `seededRng` (mulberry32) to services/rules.ts: a given seed always
+  yields the same stream of floats in [0, 1).
+- Add `fixtureSeed` (FNV-1a over season + round + both team ids) and
+  `fixtureRng` to services/campaign.ts, so the same fixture in the same
+  season always gets the same seed and different fixtures/seasons differ.
+- Wire App.tsx to seed simulation from season + fixture identity,
+  removing the `simulateMatch(home, away, Math.random)` call.
+- Add a determinism/reproducibility test block to campaign.test.ts
+  (stable seed, seed changes on any identity field, same-score replay,
+  whole-season reproducibility across two runs).
+- Correct the README reproducibility claim to describe the seeded PRNG
+  keyed on season and fixture identity.
+
+Verify: all 4 checks pass (no `simulateMatch(..., Math.random)` in
+App.tsx; services tests mention seed/determinism/reproducibility; README
+mentions "reproduc"; `npm test` green, 29 campaign tests including the 4
+new determinism tests).
+
+---
+Note for next step: Item complete, all four verify checks green, worktree holds the change (+85 -4 across App.tsx, README.md, services/rules.ts, services/campaign.ts, services/campaign.test.ts). Only the unit layer ran; the e2e half of `npm run check` was not exercised this step. `seededRng`/`fixtureSeed`/`fixtureRng` are now the reproducible-simulation primitives for the next tasks (opponent brain, Quick Play/campaign wiring).
 

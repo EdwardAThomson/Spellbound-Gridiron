@@ -24,7 +24,7 @@ import { saveGame, loadGame } from './services/saveGame';
 import { saveRosters, loadRosters } from './services/roster';
 import {
     CampaignState, Fixture, loadCampaign, saveCampaign, createDefaultCampaign,
-    startNextSeason, simulateMatch, recordResult, nextFixture,
+    startNextSeason, simulateMatch, fixtureRng, recordResult, nextFixture,
 } from './services/campaign';
 
 // Icons
@@ -268,7 +268,9 @@ export default function App() {
         const home = campaign.teams.find(t => t.id === fixture.homeId);
         const away = campaign.teams.find(t => t.id === fixture.awayId);
         if (!home || !away) return;
-        const result = simulateMatch(home, away, Math.random);
+        // Seed the simulation from the season and fixture identity, not the wall
+        // clock, so replaying a season reproduces exactly the same AI-vs-AI scores.
+        const result = simulateMatch(home, away, fixtureRng(campaign.season, fixture));
         const updated = { ...campaign, fixtures: recordResult(campaign.fixtures, fixture.homeId, fixture.awayId, result) };
         saveCampaign(updated);
         setCampaign(updated);

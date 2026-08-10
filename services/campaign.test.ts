@@ -10,6 +10,8 @@ import {
   generateFixtures,
   computeStandings,
   simulateMatch,
+  fixtureSeed,
+  fixtureRng,
   createCampaign,
   recordResult,
   isSeasonComplete,
@@ -125,6 +127,41 @@ describe('rules-based simulator', () => {
       else if (awayScore > homeScore) weakWins++;
     }
     expect(strongWins).toBeGreaterThan(weakWins);
+  });
+});
+
+describe('deterministic fixture seeding (reproducible AI-vs-AI simulation)', () => {
+  const fixture: Fixture = {
+    round: 3, homeId: 'C', awayId: 'A', homeScore: null, awayScore: null, played: false,
+  };
+
+  it('derives the same seed from the same season + fixture identity every time', () => {
+    expect(fixtureSeed(1, fixture)).toBe(fixtureSeed(1, fixture));
+  });
+
+  it('changes the seed when the season or any fixture identity field changes', () => {
+    const base = fixtureSeed(1, fixture);
+    expect(fixtureSeed(2, fixture)).not.toBe(base); // different season
+    expect(fixtureSeed(1, { ...fixture, round: 4 })).not.toBe(base); // different round
+    expect(fixtureSeed(1, { ...fixture, homeId: 'B' })).not.toBe(base); // different home
+    expect(fixtureSeed(1, { ...fixture, awayId: 'D' })).not.toBe(base); // different away
+  });
+
+  it('replays a fixture to exactly the same score (no wall-clock dependence)', () => {
+    const home = TEAMS[2];
+    const away = TEAMS[0];
+    const first = simulateMatch(home, away, fixtureRng(1, fixture));
+    const replay = simulateMatch(home, away, fixtureRng(1, fixture));
+    expect(replay).toEqual(first);
+  });
+
+  it('simulates a whole season reproducibly across two independent runs', () => {
+    const teamById = new Map(TEAMS.map((t) => [t.id, t]));
+    const simSeason = (season: number) =>
+      generateFixtures(TEAM_IDS).map((f) =>
+        simulateMatch(teamById.get(f.homeId)!, teamById.get(f.awayId)!, fixtureRng(season, f))
+      );
+    expect(simSeason(1)).toEqual(simSeason(1));
   });
 });
 

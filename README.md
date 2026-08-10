@@ -52,7 +52,7 @@ The game opens on a fantasy-styled **main menu** with four entries. You can retu
 Campaign runs a **4-team double round-robin**: every team meets every other team twice, once at each team's home, for 12 fixtures in all. A standings table tracks played / won / drawn / lost and league points on the **3-1-0** (win-draw-loss) system, sorted by points, then goal difference, then points scored.
 
 -   **Your fixtures** are played as normal matches.
--   **AI-vs-AI fixtures** resolve instantly through a pure, non-LLM simulator that derives a deterministic score from each team's overall quality: no keys, no network, and a fixed season is fully reproducible.
+-   **AI-vs-AI fixtures** resolve instantly through a pure, non-LLM simulator that derives a score from each team's overall quality: no keys, no network. Each fixture's randomness comes from a seeded PRNG keyed on the season number and the fixture's identity (round and the two teams), not the wall clock, so an AI-vs-AI season is genuinely reproducible: it replays to exactly the same results every time.
 -   When every fixture is played, a **season-complete** screen crowns the champion and offers a **new season**: rosters carry over (via the persistent roster system), and the standings reset.
 -   The campaign persists under its own **versioned localStorage** slot, separate from the single-match save and the roster slots. It resumes from the Campaign menu entry, survives a reload mid-season, and degrades gracefully (to "no usable campaign") on corrupt or missing data rather than loading a half-broken season.
 

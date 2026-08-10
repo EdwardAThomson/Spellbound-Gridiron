@@ -1,5 +1,5 @@
 import { PlayerStats } from '../types';
-import { Rng } from './rules';
+import { Rng, seededRng } from './rules';
 import { KeyValueStore, browserStore } from './saveGame';
 
 // Pure, rng-injected campaign (league) logic. Nothing here reads a global clock
@@ -219,6 +219,32 @@ export const simulateMatch = (home: CampaignTeam, away: CampaignTeam, rng: Rng):
   homeScore: simulateTouchdowns(home.quality, away.quality, rng) * TOUCHDOWN_POINTS,
   awayScore: simulateTouchdowns(away.quality, home.quality, rng) * TOUCHDOWN_POINTS,
 });
+
+/**
+ * Fold a season number and a fixture's identity (round + the two team ids) into
+ * a stable 32-bit seed. Different fixtures, and the same fixture in different
+ * seasons, get different seeds; the same fixture in the same season always gets
+ * the same one. This is what makes AI-vs-AI simulation honestly reproducible:
+ * the seed depends only on persisted data, never on the wall clock or call order.
+ */
+export const fixtureSeed = (season: number, fixture: Fixture): number => {
+  const key = `${season}:${fixture.round}:${fixture.homeId}:${fixture.awayId}`;
+  // FNV-1a over the key, kept in 32-bit range.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash | 0;
+};
+
+/**
+ * The deterministic `Rng` used to simulate a given fixture, seeded from the
+ * season and fixture identity. Callers pass this to `simulateMatch` instead of
+ * `Math.random`, so a replayed season reproduces exactly the same results.
+ */
+export const fixtureRng = (season: number, fixture: Fixture): Rng =>
+  seededRng(fixtureSeed(season, fixture));
 
 // --- Season helpers --------------------------------------------------------
 
