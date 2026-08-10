@@ -12,6 +12,8 @@ import GameLog from './components/GameLog';
 import HelpModal from './components/HelpModal';
 import StartOverlay from './components/StartOverlay';
 import MainMenu from './components/MainMenu';
+import TutorialCoachmark from './components/TutorialCoachmark';
+import { TUTORIAL_STEPS } from './services/tutorial';
 import SettingsModal from './components/SettingsModal';
 import AiAssistantPanel from './components/AiAssistantPanel';
 import { ApiKeysContext } from './context/ApiKeysContext';
@@ -97,6 +99,13 @@ export default function App() {
     const [activeSpellKey, setActiveSpellKey] = useState<string | null>(null);
     const [showHelp, setShowHelp] = useState(false);
     const [showSpellMenu, setShowSpellMenu] = useState(false);
+
+    // Guided tutorial state. When `tutorialActive`, the coachmark overlay rides
+    // on top of a live (Grass/Clear, keys-free) match and walks the player
+    // through the core loop step by step. It is view-only over the real game:
+    // starting or exiting it never writes to the localStorage save or rosters.
+    const [tutorialActive, setTutorialActive] = useState(false);
+    const [tutorialStep, setTutorialStep] = useState(0);
 
     // --- Helpers ---
     // Build a team's 5v5 formation. An optional `roster` overlays carried
@@ -217,11 +226,91 @@ export default function App() {
     // stays intact in memory (resumable) and any saved match is untouched.
     const handleQuitToMenu = () => {
         cancelTargeting();
+        setTutorialActive(false);
         setView('MENU');
     };
 
     // Resume the paused match after a Quit to Menu.
     const handleResume = () => setView('MATCH');
+
+    // --- Tutorial ---
+    // Launch the guided tutorial. It sets up a fresh, deterministic Grass/Clear
+    // board with no LLM name fetch and no save/roster writes, then flips on the
+    // coachmark overlay. Deliberately does not set `hasGameStarted`, so exiting
+    // the tutorial never leaves a phantom "Resume Match" pointing at it.
+    const handleTutorial = () => {
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+        cancelTargeting();
+
+        setGameState(prev => ({
+            turn: 1,
+            currentTeam: TeamSide.HOME,
+            selectedPlayerId: null,
+            ballPosition: { x: 6, y: 9 },
+            boardWidth: BOARD_WIDTH,
+            boardHeight: BOARD_HEIGHT,
+            terrain: TerrainType.GRASS,
+            weather: Weather.CLEAR,
+            hazards: [],
+            meteor: null,
+            homeTeam: { ...INITIAL_HOME_TEAM, name: 'Elven Vanguard', race: 'High Elves', players: setupTeam(TeamSide.HOME, Weather.CLEAR) },
+            awayTeam: { ...INITIAL_AWAY_TEAM, name: 'Orc Bashers', race: 'Dark Orcs', players: setupTeam(TeamSide.AWAY, Weather.CLEAR) },
+            gameLog: ['Tutorial: welcome to the pitch! Follow the coachmarks.'],
+            commentary: 'Tutorial mode — learn the ropes at your own pace.',
+            isGameOver: false,
+            winner: null,
+        }));
+        setTutorialStep(0);
+        setTutorialActive(true);
+        setView('MATCH');
+    };
+
+    // Advance to the next coachmark (clamped); the last step's button finishes.
+    const advanceTutorial = () => setTutorialStep(prev => Math.min(prev + 1, TUTORIAL_STEPS.length - 1));
+
+    // Leave the tutorial cleanly: drop the overlay and return to the menu. No
+    // save or roster is touched here.
+    const endTutorial = () => {
+        setTutorialActive(false);
+        setTutorialStep(0);
+        cancelTargeting();
+        setView('MENU');
+    };
+
+    // Teach-by-doing: watch the live game and auto-advance the current coachmark
+    // when the real action it asks for actually happens. Conditions are
+    // level-triggered off committed state, so they are robust to either dice
+    // outcome and never soft-lock (every step also has a Next button as an
+    // escape hatch). `acknowledge` steps have no game event and wait for Next.
+    useEffect(() => {
+        if (!tutorialActive) return;
+        const step = TUTORIAL_STEPS[tutorialStep];
+        if (!step) return;
+        let done = false;
+        switch (step.completion.kind) {
+            case 'select-player':
+                done = gameState.selectedPlayerId != null;
+                break;
+            case 'move-player':
+                done = gameState.homeTeam.players.some(p => p.movesRemaining < p.stats.move);
+                break;
+            case 'pickup-ball':
+                done = [...gameState.homeTeam.players, ...gameState.awayTeam.players].some(p => p.hasBall);
+                break;
+            case 'score-touchdown':
+                done = gameState.homeTeam.score > 0;
+                break;
+            case 'end-turn':
+                done = gameState.currentTeam !== TeamSide.HOME;
+                break;
+            default:
+                done = false;
+        }
+        if (done) advanceTutorial();
+    }, [gameState, tutorialActive, tutorialStep]);
 
     // --- Setup Teams on Mount ---
     useEffect(() => {
@@ -1069,6 +1158,7 @@ export default function App() {
 
                     <button
                         onClick={endTurn}
+                        data-tutorial="end-turn-button"
                         className="mt-4 w-full py-4 bg-amber-700 hover:bg-amber-600 text-white font-bold uppercase tracking-widest rounded shadow-lg border border-amber-500/20 transition-colors"
                     >
                         End Turn
@@ -1097,6 +1187,7 @@ export default function App() {
                         <button
                             onClick={() => setShowHelp(true)}
                             title="Controls and how to play"
+                            data-tutorial="help-button"
                             className="text-xs text-stone-500 hover:text-stone-300 underline"
                         >
                             ❓ Help
@@ -1141,6 +1232,7 @@ export default function App() {
 
                         {/* Grid Container */}
                         <div
+                            data-tutorial="board"
                             className="grid gap-[1px] bg-white/5 p-1"
                             style={{
                                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, minmax(24px, 40px))`,
@@ -1179,8 +1271,20 @@ export default function App() {
                     <MainMenu
                         onQuickPlay={handleQuickPlay}
                         onSettings={() => setShowSettings(true)}
+                        onTutorial={handleTutorial}
                         canResume={hasGameStarted && !gameState.isGameOver}
                         onResume={handleResume}
+                    />
+                )}
+
+                {/* GUIDED TUTORIAL COACHMARK (rides on top of the live board) */}
+                {tutorialActive && view === 'MATCH' && TUTORIAL_STEPS[tutorialStep] && (
+                    <TutorialCoachmark
+                        step={TUTORIAL_STEPS[tutorialStep]}
+                        index={tutorialStep}
+                        total={TUTORIAL_STEPS.length}
+                        onNext={tutorialStep >= TUTORIAL_STEPS.length - 1 ? endTutorial : advanceTutorial}
+                        onSkip={endTutorial}
                     />
                 )}
 

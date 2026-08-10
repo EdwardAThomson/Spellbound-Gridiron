@@ -4,8 +4,9 @@ import { saveScreenshot } from './screenshot';
 // Main-menu navigation, end to end. The app opens on the fantasy home screen
 // offering exactly Quick Play, Campaign, Tutorial and Settings. This drives the
 // wired paths (Quick Play -> setup -> match, Settings modal) and the in-match
-// return to the menu, all with no API keys. Campaign and Tutorial are wired up
-// by later tasks, so here they are present but disabled.
+// return to the menu, all with no API keys. Tutorial is wired up (its own spec
+// drives it end to end); Campaign is wired up by a later task, so here it is
+// present but disabled.
 
 test('the main menu offers the four modes and Quick Play round-trips to the menu', async ({ page }) => {
   await page.goto('/');
@@ -15,7 +16,7 @@ test('the main menu offers the four modes and Quick Play round-trips to the menu
   await expect(page.getByRole('button', { name: /quick play/i })).toBeEnabled();
   await expect(page.getByRole('button', { name: /settings/i })).toBeEnabled();
   await expect(page.getByRole('button', { name: /campaign/i })).toBeDisabled();
-  await expect(page.getByRole('button', { name: /tutorial/i })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /tutorial/i })).toBeEnabled();
   await saveScreenshot(page, 'menu-home');
 
   // Settings opens the existing modal over the menu, then closes back to it.

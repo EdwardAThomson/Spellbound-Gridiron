@@ -197,10 +197,23 @@ const BoardTile: React.FC<BoardTileProps> = ({
     tint += ' bg-yellow-500/20';
   }
 
+  // Stable anchors the guided tutorial points its coachmarks at. One value per
+  // tile (a tile is at most one of these at a time in the tutorial's flow);
+  // priority ball > endzone > reachable keeps each anchor resolvable when its
+  // step is showing.
+  const tutorialAnchor = isBall
+    ? 'ball'
+    : isEndZone === TeamSide.HOME
+      ? 'endzone'
+      : isValidMove
+        ? 'reachable-tile'
+        : undefined;
+
   return (
     <div
       onClick={onClick}
       data-testid={`tile-${x}-${y}`}
+      data-tutorial={tutorialAnchor}
       className={`group relative w-full h-full border ${borderColor} ${rootState} flex items-center justify-center transition-all duration-200`}
       style={{ aspectRatio: '1/1' }}
     >

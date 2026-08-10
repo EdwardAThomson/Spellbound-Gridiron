@@ -24,6 +24,7 @@ const PlayerToken: React.FC<PlayerTokenProps> = ({ player, onClick }) => {
   return (
     <div
       onClick={onClick}
+      data-tutorial={isHome ? 'player-token' : undefined}
       className={`
         relative w-[85%] h-[85%] rounded-full shadow-lg cursor-pointer 
         flex items-center justify-center text-sm select-none transition-transform hover:scale-110

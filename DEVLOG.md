@@ -256,3 +256,17 @@ README and CLAUDE.md already documented Help, so no doc changes. Full
 Playwright suite (6 specs) and Vitest suite (101 tests) green; both verify
 commands pass.
 
+## 2026-08-10 — i_3b7e57cc7a04 — Build the guided tutorial UI driven by the services/tutorial.ts step list: anchored coachmarks with short text and Next/Skip, each step waiting for the real action where practical and handling both dice outcomes gracefully, running on Grass/Clear with no API keys, launched from the menu, skippable at any time, and returning cleanly to the menu without touching saves or rosters; add e2e/tutorial.spec.ts driving the happy path to completion back to the menu.
+
+Guided tutorial UI driven by the services/tutorial.ts step list.
+
+Adds an anchored coachmark overlay that rides on top of a live Grass/Clear, keys-free match, walking the player through the core loop step by step with Next/Skip controls, launched from the menu and skippable at any time, returning cleanly to the menu without touching saves or rosters.
+
+- `components/TutorialCoachmark.tsx`: new pointer-events-none spotlight overlay that finds the element named by each step's `data-tutorial` anchor, spotlights it, and floats an instruction bubble with Next/Skip; centres and dims when no anchor resolves yet.
+- `App.tsx`: tutorial state (`tutorialActive`/`tutorialStep`), `handleTutorial` (fresh deterministic board, no LLM name fetch, no save/roster writes, no `hasGameStarted`), `advanceTutorial`/`endTutorial`, and a level-triggered auto-advance effect that watches committed game state so each step is robust to either dice outcome and never soft-locks. Quit to Menu also drops the overlay. `data-tutorial` anchors added on the End Turn, Help, and board elements; `MainMenu` wired with `onTutorial`.
+- `components/BoardTile.tsx`, `components/PlayerToken.tsx`: `data-tutorial` anchors (ball/endzone/reachable tile; HOME player token).
+- `e2e/tutorial.spec.ts`: new happy-path spec driving menu -> core loop (select, move, end turn, Next-advanced steps) -> Finish back to the menu, plus a skip-at-first-step spec asserting no Resume Match is left behind.
+- `e2e/menu.spec.ts`: Tutorial now expected enabled.
+
+Verify passed (exit 0): `npx playwright test e2e/tutorial.spec.ts`, 2/2. Reported full gate green (101/101 unit, 8/8 e2e) per the execute note; not re-run in this step.
+
