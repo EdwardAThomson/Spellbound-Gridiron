@@ -1,127 +1,67 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_df5df1c84aa4
-  generated_at: 2026-08-10T14:18:25Z
+  run_id: r_a14502efa867
+  generated_at: 2026-08-10T21:02:11Z
   regenerable: false
 ---
 
 mode: closed
 items:
-  - id: i_2f78d838f790
-    statement: "Add pure, rng-injected campaign logic in services/campaign.ts: a 4-team double round-robin fixture generator, 3-1-0 standings computation, a non-LLM rules-based match simulator that derives a deterministic score from team quality for a fixed rng, and versioned localStorage serialize/deserialize helpers that degrade gracefully on corrupt or missing data; add services/campaign.test.ts asserting the fixture set is non-empty and correctly sized (12 fixtures for 4 teams), the simulator returns a deterministic score for a fixed rng, and corrupt input degrades rather than throws."
+  - id: i_b621aaee508a
+    statement: "Add a seeded PRNG helper in the services layer and make campaign fixture simulation deterministic (derive each simulated fixture's rng from season + fixture identity, removing App.tsx's simulateMatch(..., Math.random) call); add a determinism/reproducibility unit test and correct the README reproducibility claim."
     kind: build
     owner: agent
-    bears_on: ""
+    bears_on: "Task 1: makes the campaign simulator honestly reproducible so re-simulating the same fixture of the same season yields the same score, and aligns the docs with the code."
     deps: []
-    parallel: true
-    scope: ["services/campaign.ts", "services/campaign.test.ts"]
+    scope: ["services/", "App.tsx", "README.md", "CLAUDE.md"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/campaign.test.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/campaign.test.ts"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -Eq \"simulateMatch\\([^)]*Math\\.random\" App.tsx"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Eq \"simulateMatch\\([^)]*Math\\.random\" App.tsx"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('services/**/*.test.ts',recursive=True)); sys.exit(0 if any(k in text for k in ['seed','determinist','reproduc']) else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('services/**/*.test.ts',recursive=True)); sys.exit(0 if not any(k in text for k in ['seed','determinist','reproduc']) else 1)\""
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Eiq \"reproduc\" README.md"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -Eiq \"reproduc\" README.md"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npm test"
         assertion_regex: "([0-9]+) passed"
-  - id: i_4c8831bed4af
-    statement: "Add a data-driven tutorial step list in services/tutorial.ts: an ordered, non-empty list of coachmark steps where each carries an anchor, plain-language text, and a completion condition; add services/tutorial.test.ts asserting the list is non-empty, ordered, and every step is well-formed (has anchor, text, and completion condition)."
+  - id: i_8ef90cf2eae7
+    statement: "Add a pure, rng-injected, LLM-free opponent turn planner (services/opponent.ts) that emits an ordered list of plain-data actions (move/tackle/pass/spell/pass-turn) covering the required heuristics with a hard action cap, plus seeded unit tests (services/opponent.test.ts) covering the required edge cases."
     kind: build
     owner: agent
-    bears_on: ""
+    bears_on: "Task 2: the deterministic rules-based opponent brain that Task 3 wires into live matches; must always produce a legal, terminating turn and never call an LLM."
     deps: []
-    parallel: true
-    scope: ["services/tutorial.ts", "services/tutorial.test.ts"]
+    scope: ["services/opponent.ts", "services/opponent.test.ts"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/tutorial.test.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/tutorial.test.ts"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/opponent.ts && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; src=open('services/opponent.ts').read(); low=src.lower(); planners=['planturn','planopponentturn','planactions','planopponentactions']; has_planner=any(('export' in ln.lower() and any(p in ln.lower() for p in planners)) for ln in src.splitlines()); llm=['llmhelper','generatetext','dangerouslyallowbrowser','openai','anthropic','@google','fetch(']; has_llm=any(k in low for k in llm); sys.exit(0 if (has_planner and not has_llm) else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/opponent.ts && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; src=open('services/opponent.ts').read(); low=src.lower(); planners=['planturn','planopponentturn','planactions','planopponentactions']; has_planner=any(('export' in ln.lower() and any(p in ln.lower() for p in planners)) for ln in src.splitlines()); llm=['llmhelper','generatetext','dangerouslyallowbrowser','openai','anthropic','@google','fetch(']; has_llm=any(k in low for k in llm); sys.exit(0 if not (has_planner and not has_llm) else 1)\""
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; t=open('services/opponent.test.ts').read().lower(); kws=['stun','no legal','zero mana','blocked','boxed','loose ball','terminat','hard cap','own endzone']; c=sum(1 for k in kws if k in t); print(c); sys.exit(0 if c>=4 else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; t=open('services/opponent.test.ts').read().lower(); kws=['stun','no legal','zero mana','blocked','boxed','loose ball','terminat','hard cap','own endzone']; c=sum(1 for k in kws if k in t); sys.exit(0 if c<4 else 1)\""
+        assertion_regex: "([0-9]+)"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npm test"
         assertion_regex: "([0-9]+) passed"
-  - id: i_f61ea6a771dd
-    statement: "Document the new Main-menu, Campaign, and Tutorial modes in README.md and CLAUDE.md, and sync any mode/control wording into GAME_RULES (utils/contextSerializer.ts) so gameplay docs do not drift."
+  - id: i_e9fba7eda6e0
+    statement: "Wire the opponent into the game: Quick Play Hotseat/Computer selector (default Computer), campaign player-fixtures default the other team to Computer, a visible opponent-turn indicator, paced action execution through existing handlers, safe quit-to-menu mid-turn, Playwright coverage of a Quick Play and a campaign match vs Computer, and consistent docs across GAME_RULES, Help/RuleBookModal, README.md and CLAUDE.md."
     kind: build
     owner: agent
-    bears_on: ""
-    deps: []
-    parallel: true
-    scope: ["README.md", "CLAUDE.md", "utils/contextSerializer.ts"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q Campaign README.md && grep -q Tutorial README.md && grep -qi menu README.md"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! ( grep -q Campaign README.md && grep -q Tutorial README.md && grep -qi menu README.md )"
-  - id: i_04515ee5757d
-    statement: "Replace the start overlay with a fantasy-styled main-menu home screen offering exactly Quick Play, Campaign, Tutorial, and Settings; fully wire Quick Play (to the existing terrain/weather+match flow) and Settings (existing modal); add a quit-to-menu control and a menu return from the game-over screen, both without a page reload and without corrupting a running match's save; add e2e/menu.spec.ts (drive the menu, start Quick Play, return to menu in-game) and update the existing e2e specs to navigate via the new menu."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: []
-    scope: ["App.tsx", "components/", "e2e/"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/menu.spec.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/menu.spec.ts"
-        assertion_regex: "([0-9]+) passed"
-  - id: i_5b0e08f9f0ea
-    statement: "Add an always-available in-game Help entry with two clearly separated sections, Controls (unit selection, click-to-move, tackle, pass/spell targeting, End Action/End Turn, Save/Load, Rematch) and How-to-play (objective, turn structure, stats, terrain/weather, spells, XP/levels, win condition), reusing GAME_RULES as the single source of truth rather than duplicating rule text; add e2e/help.spec.ts asserting both sections appear."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_04515ee5757d"]
+    bears_on: "Task 3: connects the pure planner to the live board and UI, extends the CI gate with e2e coverage, and keeps all opponent wording consistent across the four sources of truth."
+    deps: ["i_b621aaee508a", "i_8ef90cf2eae7"]
     dep_reasons:
-      - depends_on: "i_04515ee5757d"
-        reason: "The Help e2e opens Help from the new main-menu-driven in-game UI and shares App.tsx wiring; the menu must exist and be committed first."
-    scope: ["App.tsx", "components/", "e2e/help.spec.ts"]
+      - depends_on: "i_b621aaee508a"
+        reason: "Task 3 edits App.tsx (the simulateMatch call site Item 0 rewrites) and the README/CLAUDE sections Item 0 revises; its diff must apply on top of Item 0's, and the campaign player-vs-Computer default builds on Item 0's deterministic campaign wiring."
+      - depends_on: "i_8ef90cf2eae7"
+        reason: "Task 3 imports the pure planner exported from services/opponent.ts (created only by Item 1) and its e2e specs drive a live Computer turn, so neither the wiring nor npm run check can run until that module's commit exists; the two items share no edited file, so this edge is declared explicitly."
+    scope: ["App.tsx", "components/", "e2e/", "types.ts", "utils/contextSerializer.ts", "README.md", "CLAUDE.md"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rlq GAME_RULES components/"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rlq GAME_RULES components/"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/help.spec.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/help.spec.ts"
-        assertion_regex: "([0-9]+) passed"
-  - id: i_3b7e57cc7a04
-    statement: "Build the guided tutorial UI driven by the services/tutorial.ts step list: anchored coachmarks with short text and Next/Skip, each step waiting for the real action where practical and handling both dice outcomes gracefully, running on Grass/Clear with no API keys, launched from the menu, skippable at any time, and returning cleanly to the menu without touching saves or rosters; add e2e/tutorial.spec.ts driving the happy path to completion back to the menu."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_4c8831bed4af", "i_04515ee5757d"]
-    dep_reasons:
-      - depends_on: "i_4c8831bed4af"
-        reason: "The tutorial UI imports the ordered step-list API from services/tutorial.ts, which item 1 creates; scopes share no file so this edge is declared explicitly."
-      - depends_on: "i_04515ee5757d"
-        reason: "The tutorial is launched from the new main menu and shares App.tsx wiring; the menu must exist and be committed first."
-    scope: ["App.tsx", "components/", "e2e/tutorial.spec.ts"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/tutorial.spec.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/tutorial.spec.ts"
-        assertion_regex: "([0-9]+) passed"
-  - id: i_5fca45517a8f
-    statement: "Build the campaign hub UI on top of services/campaign.ts: a standings table (played/won/drawn/lost/points, 3-1-0), upcoming fixture, and Continue/Play Next Match control; player fixtures play as normal matches; AI-vs-AI fixtures resolve instantly via the pure simulator; a season-complete screen crowning the champion with a new-season flow (rosters carry over via the existing roster system, standings reset); campaign state persists under its own versioned localStorage key, resumes from the Campaign menu entry, survives reload mid-season, and degrades on corrupt/missing data; add e2e/campaign.spec.ts entering Campaign from the menu, rendering the hub, advancing a fixture, and confirming persistence across a reload."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_2f78d838f790", "i_04515ee5757d"]
-    dep_reasons:
-      - depends_on: "i_2f78d838f790"
-        reason: "The campaign UI imports the fixtures/standings/simulator/persistence API from services/campaign.ts, which item 0 creates; scopes share no file so this edge is declared explicitly."
-      - depends_on: "i_04515ee5757d"
-        reason: "Campaign is entered from the new main menu and shares App.tsx wiring; the menu must exist and be committed first."
-    scope: ["App.tsx", "components/", "e2e/campaign.spec.ts"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/campaign.spec.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/campaign.spec.ts"
-        assertion_regex: "([0-9]+) passed"
-  - id: i_3ed2b7d722ab
-    statement: "Verify and, where needed, fix integration so the full CI gate is green with all four new e2e specs and both new unit tests present and wired in: npm run check (Vitest unit + Playwright e2e) passes end to end with no test calling a real LLM."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_2f78d838f790", "i_4c8831bed4af", "i_04515ee5757d", "i_5b0e08f9f0ea", "i_3b7e57cc7a04", "i_5fca45517a8f"]
-    dep_reasons:
-      - depends_on: "i_2f78d838f790"
-        reason: "npm run check executes services/campaign.test.ts, which must exist and pass; item 0 creates it."
-      - depends_on: "i_4c8831bed4af"
-        reason: "npm run check executes services/tutorial.test.ts, which must exist and pass; item 1 creates it."
-      - depends_on: "i_04515ee5757d"
-        reason: "npm run check executes e2e/menu.spec.ts and the menu-updated existing specs; item 3 creates/updates them."
-      - depends_on: "i_5b0e08f9f0ea"
-        reason: "npm run check executes e2e/help.spec.ts; item 4 creates it."
-      - depends_on: "i_3b7e57cc7a04"
-        reason: "npm run check executes e2e/tutorial.spec.ts; item 5 creates it."
-      - depends_on: "i_5fca45517a8f"
-        reason: "npm run check executes e2e/campaign.spec.ts; item 6 creates it."
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f e2e/menu.spec.ts && test -f e2e/help.spec.ts && test -f e2e/tutorial.spec.ts && test -f e2e/campaign.spec.ts && test -f services/campaign.test.ts && test -f services/tutorial.test.ts && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! ( test -f e2e/menu.spec.ts && test -f e2e/help.spec.ts && test -f e2e/tutorial.spec.ts && test -f e2e/campaign.spec.ts && test -f services/campaign.test.ts && test -f services/tutorial.test.ts )"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rEl \"Hotseat\" --include=*.tsx . | grep -q . && grep -rEli \"computer\" --include=*.tsx . | grep -q ."
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! { grep -rEl \"Hotseat\" --include=*.tsx . | grep -q .; }"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob,re; pats=['opponent.?s turn','computer.?s turn','opponent is thinking','computer is thinking']; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('**/*.tsx',recursive=True)); sys.exit(0 if any(re.search(p,text) for p in pats) else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob,re; pats=['opponent.?s turn','computer.?s turn','opponent is thinking','computer is thinking']; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('**/*.tsx',recursive=True)); sys.exit(0 if not any(re.search(p,text) for p in pats) else 1)\""
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; r=open('README.md').read().lower(); c=open('CLAUDE.md').read().lower(); rp=['computer opponent','rules-based opponent','ai opponent','opponent ai']; cp=['computer opponent','rules-based opponent','opponent brain','opponent ai']; sys.exit(0 if (any(p in r for p in rp) and any(p in c for p in cp)) else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys; r=open('README.md').read().lower(); c=open('CLAUDE.md').read().lower(); rp=['computer opponent','rules-based opponent','ai opponent','opponent ai']; cp=['computer opponent','rules-based opponent','opponent brain','opponent ai']; sys.exit(0 if not (any(p in r for p in rp) and any(p in c for p in cp)) else 1)\""
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('e2e/**/*.spec.ts',recursive=True)); sys.exit(0 if ('computer' in text or 'opponent' in text) else 1)\""
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,glob; text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('e2e/**/*.spec.ts',recursive=True)); sys.exit(0 if not ('computer' in text or 'opponent' in text) else 1)\""
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/Projects/plimsoll/.venv/bin/python3 -c \"import sys,os,glob; ok=os.path.exists('services/opponent.ts'); text=''.join(open(f,encoding='utf-8',errors='ignore').read().lower() for f in glob.glob('e2e/**/*.spec.ts',recursive=True)); sys.exit(0 if (ok and ('computer' in text or 'opponent' in text)) else 1)\" && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check"
         assertion_regex: "([0-9]+) passed"

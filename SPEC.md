@@ -1,54 +1,53 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_df5df1c84aa4
-  generated_at: 2026-08-10T14:18:25Z
+  run_id: r_a14502efa867
+  generated_at: 2026-08-10T21:02:11Z
   regenerable: true
 ---
 
 ## Goal
 
-Continue Spellbound Gridiron (React + TS + Vite) by delivering four mandatory, fully-playable features on top of the existing game: (1) a fantasy-styled main-menu home screen with Quick Play / Campaign / Tutorial / Settings that is reachable again from in-game without a page reload and never corrupts a running match's save; (2) an always-available in-game Help with clearly separated Controls and How-to-play sections, reusing GAME_RULES as the single source of truth; (3) a data-driven, unit-testable, skippable guided Tutorial (Grass/Clear, no keys) that teaches by doing via anchored coachmarks and returns cleanly to the menu without touching saves; and (4) a first-playable Campaign: a 4-team double round-robin league with a 3-1-0 standings table, player fixtures played as normal matches, AI-vs-AI fixtures resolved by a pure rng-injected non-LLM simulator, a campaign hub, a season-complete/new-season flow, and versioned localStorage persistence that survives reload and degrades on corrupt data. npm run check must stay green and be extended (new pure logic in services, rng-injected and unit-tested; every new screen/flow gets Playwright coverage; existing e2e specs updated to navigate the new menu; no test calls a real LLM), and any new mechanic/control must be reflected consistently in GAME_RULES, the RuleBookModal/Help, README.md, and CLAUDE.md.
+Add a real, deterministic, rules-based computer opponent to Spellbound Gridiron across three mandatory tasks: (1) make the campaign simulator honestly reproducible by deriving each simulated fixture's rng deterministically from the season number and fixture identity via a seeded PRNG helper in the services layer (removing the App.tsx `simulateMatch(home, away, Math.random)` call) and correcting the docs; (2) implement a pure, rng-injected, unit-tested opponent brain in a new services module (e.g. services/opponent.ts) that emits an ordered list of plain-data actions (move/tackle/pass/spell/pass-turn) covering the required heuristics (chase loose ball, advance carrier toward the correct endzone, favourable tackles, sensible passes, Wizard mana use, hazard/terrain avoidance) with a hard action cap that always produces a legal, terminating turn and never uses an LLM; and (3) wire it into the game with a Quick Play opponent selector (Hotseat/Computer, default Computer), campaign player-fixtures defaulting the other team to Computer, a visible opponent-turn indicator, paced action execution through the existing handlers, safe quit-to-menu mid-turn, and Playwright coverage of a Quick Play and a campaign match against the Computer. `npm run check` must stay green with no API keys, and all added mechanics/controls must stay consistent across GAME_RULES, Help/RuleBookModal, README.md, and CLAUDE.md.
 
 ## Mode
 
-closed — The four tasks each have a definite end state that can be written down in advance (a menu with exactly four named entries, a Help screen with two named sections, a scripted tutorial with a fixed step list, a 4-team double round-robin campaign with a rules-based simulator). Success is checkable by extending the existing deterministic gate (Vitest + Playwright) with new specs and tests, so the terminal state is specifiable up front rather than open-ended.
+closed — The desired end state is fully specifiable in advance: named new modules (seeded PRNG helper, services/opponent.ts), specific unit/e2e tests, a specific UI selector and indicator, and a green `npm run check`. Every deliverable can be written down and commanded now, so the run is closed.
 
 ## Acceptance
 
-- A main-menu e2e spec drives the new home screen (Quick Play / Campaign / Tutorial / Settings), starts a Quick Play match through it, and returns to the menu in-game without a page reload; it passes under Playwright. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/menu.spec.ts`
-- An in-game Help e2e spec opens Help and asserts both a Controls section and a How-to-play section are shown, and the Help component reuses GAME_RULES rather than duplicating it. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rlq GAME_RULES components/ && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/help.spec.ts`
-- The tutorial coachmark step list is data-driven and unit-tested (a non-empty ordered list with anchor/text/completion condition), and a happy-path e2e spec drives the guided tutorial to completion back to the menu. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/tutorial.test.ts && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/tutorial.spec.ts`
-- The campaign fixture/standings/AI-match-simulator logic is pure and rng-injected, and its unit tests pass — including asserting the double round-robin fixture set for 4 teams is non-empty and correctly sized (12 fixtures) and that the simulator returns a deterministic score for a fixed rng. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx vitest run services/campaign.test.ts`
-- A campaign e2e spec enters Campaign from the menu, renders the standings/hub, plays or advances a fixture, and confirms campaign state persists across a reload; it passes under Playwright. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright test e2e/campaign.spec.ts`
-- The full CI gate (npm run check = Vitest unit + Playwright e2e) stays green with all four new specs/tests present and wired in. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f e2e/menu.spec.ts && test -f e2e/help.spec.ts && test -f e2e/tutorial.spec.ts && test -f e2e/campaign.spec.ts && test -f services/campaign.test.ts && test -f services/tutorial.test.ts && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check`
-- README.md documents the new Main-menu/Campaign/Tutorial modes so gameplay docs do not drift. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q Campaign README.md && grep -q Tutorial README.md`
+- A new pure opponent-brain module exists in the services layer exposing a turn-planner and containing no LLM/network calls. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/opponent.ts && grep -Eq "export (function|const) (planTurn|planOpponentTurn|planActions|planOpponentActions)" services/opponent.ts && ! grep -Eiq "llmHelper|generateText|dangerouslyAllowBrowser|fetch\(|openai|anthropic|@google" services/opponent.ts`
+- Opponent decision logic is unit-tested with seeded rng, covering the required edge cases, and the whole Vitest suite passes. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/opponent.test.ts && [ "$(grep -Eic "stun|no legal|zero mana|blocked|boxed|loose ball|terminat|hard cap|own endzone" services/opponent.test.ts)" -ge 4 ] && /home/edward/.nvm/versions/node/v22.22.1/bin/npm test`
+- The campaign simulator no longer draws from Math.random in App.tsx; simulated fixtures are seeded deterministically. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -Eq "simulateMatch\([^)]*Math\.random" App.tsx`
+- A seeded-PRNG determinism/reproducibility test exists in the services layer and the unit suite passes with it. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rEli "seed|determinist|reproduc" services --include=*.test.ts | grep -q . && /home/edward/.nvm/versions/node/v22.22.1/bin/npm test`
+- Quick Play setup exposes an opponent selector offering Hotseat and Computer. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rEl "Hotseat" --include=*.tsx . | grep -q . && grep -rEli "computer" --include=*.tsx . | grep -q .`
+- A visible opponent-turn indicator is rendered in the UI during the computer's turn. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rEli "opponent'?s turn|computer'?s turn|opponent is thinking|computer is thinking" --include=*.tsx . | grep -q .`
+- Playwright e2e covers a match against the Computer opponent (Quick Play and a campaign player-fixture) and the e2e suite passes with no API keys. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rEli "computer|opponent" e2e --include=*.spec.ts | grep -q . && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run test:e2e`
+- Docs are updated so the reproducibility claim is exactly true and the computer opponent is documented consistently in README.md and CLAUDE.md. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -qiE "computer opponent|rules-based opponent|AI opponent|opponent AI" README.md && grep -qiE "computer opponent|rules-based opponent|opponent (brain|AI)" CLAUDE.md`
+- The full CI gate (`npm run check`, unit + e2e) is green with the new opponent module and e2e spec present. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/opponent.ts && ls e2e/*.spec.ts | xargs grep -lEi "computer|opponent" | grep -q . && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check`
 
 ## Scope
 
-- Replace the current start overlay with a fantasy-styled main-menu home screen offering exactly Quick Play, Campaign, Tutorial, Settings, reachable again in-game (game-over screen + a quit-to-menu control) without a page reload and without corrupting a running match's save
-- Add an always-available in-game Help with separated Controls and How-to-play sections, reusing GAME_RULES; update RuleBookModal/Game Rules button accordingly
-- Implement a data-driven, unit-testable, skippable tutorial (Grass/Clear, no API keys/backend) with anchored coachmarks covering select/move/tackle/pickup/pass/spell/end-turn/scoring, waiting on real actions where practical and handling both dice outcomes, not touching saves or rosters
-- Implement first-playable Campaign: 4-team double round-robin fixtures, 3-1-0 standings table, player fixtures as normal matches, pure rng-injected non-LLM AI-vs-AI match simulator based on team quality, campaign hub (standings + next fixture + Continue/Play Next), season-complete/new-season flow (rosters carry, standings reset), versioned localStorage persistence that resumes, survives reload, and degrades on corrupt/missing data; player XP persists via existing roster system
-- Put new pure logic in services (rng-injected) with Vitest coverage and give every new screen/flow Playwright coverage; update existing e2e specs to navigate via the new menu so npm run check stays green; ensure no test calls a real LLM
-- Keep GAME_RULES (utils/contextSerializer.ts), the RuleBookModal/Help, README.md, and CLAUDE.md consistent with any added/changed mechanic or control
-- Meet the UI quality bar and review new screens via the screenshot helper at desktop and narrow viewports
+- Task 1: seeded PRNG helper in the services layer, unit-tested, used to derive each simulated fixture's rng from season number + fixture identity; remove App.tsx's Math.random seeding of simulateMatch; correct the reproducibility claim in the docs.
+- Task 2: services/opponent.ts pure, rng-injected, unit-tested turn planner emitting ordered plain-data actions, covering the required heuristics, with a hard action cap guaranteeing a legal, terminating turn and no LLM use.
+- Task 3: Quick Play opponent selector (Hotseat/Computer, default Computer); campaign player-fixtures default the other team to Computer; opponent-turn indicator; paced execution of opponent actions through existing handlers; input blocked but menus/Help accessible; safe quit-to-menu mid-turn; Playwright coverage for Quick Play and a campaign player-fixture vs Computer.
+- Keep GAME_RULES (utils/contextSerializer.ts), Help/RuleBookModal, README.md, and CLAUDE.md consistent for any added control/mechanic.
+- Keep `npm run check` green with no API keys; review new/changed screens via the screenshot helper at desktop and narrow viewports.
 
 ## Out of scope
 
-- Tournament/knockout mode
-- Player trading
+- LLM-driven opponents
+- Difficulty levels
+- Per-race stat lines
+- Changing team quality or simulator scoring beyond Task 1's seeding
+- Tournament mode
+- Trading
 - World map
-- Skill unlocks
-- Injuries
 - Multiplayer
-- Any rework of existing terrain/weather/XP mechanics
-- Adding new LLM providers or changing the two-tier AI architecture
 
 ## Environment
 
-- Node v22.22.1 is available for running npm scripts and Vitest/Playwright — probe: `/home/edward/.nvm/versions/node/v22.22.1/bin/node --version`
-- npm 11.19.0 is available to run the test/check scripts — probe: `/home/edward/.nvm/versions/node/v22.22.1/bin/npm --version`
-- The Playwright CLI/toolchain is present so e2e specs can run against the Vite dev server started by playwright.config.ts webServer — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npx playwright --version`
-- The project's existing gate (Vitest unit + Playwright chromium) is green before this run, so any post-run red is attributable to this run's changes — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check`
-- The e2e smoke path runs with no API keys and no backend (graceful degradation), so tests need no LLM credentials — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rq webServer playwright.config.ts`
+- Node and npm are available at the nvm-managed paths used in verify commands. — probe: `/home/edward/.nvm/versions/node/v22.22.1/bin/npm --version && /home/edward/.nvm/versions/node/v22.22.1/bin/node --version`
+- The repository under test is present with its package.json test scripts (test, test:e2e, check). — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/node -e "const s=require('./package.json').scripts; process.exit(s.test&&s['test:e2e']&&s.check?0:1)"`
+- App.tsx currently seeds simulateMatch with Math.random (the gap Task 1 closes). — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Eq "simulateMatch\([^)]*Math\.random" App.tsx`
+- The pre-existing unit + e2e harness is green before this run, so regressions introduced by the run are attributable. — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && /home/edward/.nvm/versions/node/v22.22.1/bin/npm run check`
