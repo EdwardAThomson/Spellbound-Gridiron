@@ -39,6 +39,8 @@ export {
   effectiveMove,
   kickoffPosition,
   FORMATION_X,
+  findPath,
+  reachableTiles,
   WIN_SCORE,
   MAX_TURNS,
   LAVA_HAZARD_COUNT,

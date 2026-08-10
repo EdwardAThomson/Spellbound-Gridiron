@@ -112,6 +112,79 @@ export const scatterPosition = (pos: Position, rng: Rng): Position => {
   };
 };
 
+// --- Pathfinding -----------------------------------------------------------
+//
+// Movement is a king's move (8 directions), one Move point per square. The
+// board is small (12x18), so a plain BFS gives shortest paths cheaply. Blocked
+// tiles (any player) can be neither passed through nor landed on; the loose
+// ball's tile is an ordinary walkable square.
+
+const KING_STEPS: readonly { x: number; y: number }[] = [
+  { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
+  { x: -1, y: 0 },                    { x: 1, y: 0 },
+  { x: -1, y: 1 },  { x: 0, y: 1 },  { x: 1, y: 1 },
+];
+
+const posKey = (p: Position): string => `${p.x},${p.y}`;
+
+/** BFS from `from` up to `maxSteps`, returning each visited tile's parent. */
+const bfsParents = (
+  from: Position,
+  maxSteps: number,
+  isBlocked: (pos: Position) => boolean
+): Map<string, { pos: Position; parent: string | null; depth: number }> => {
+  const visited = new Map<string, { pos: Position; parent: string | null; depth: number }>();
+  visited.set(posKey(from), { pos: from, parent: null, depth: 0 });
+  let frontier: Position[] = [from];
+  for (let depth = 1; depth <= maxSteps && frontier.length > 0; depth++) {
+    const next: Position[] = [];
+    for (const tile of frontier) {
+      for (const step of KING_STEPS) {
+        const neighbour = { x: tile.x + step.x, y: tile.y + step.y };
+        const key = posKey(neighbour);
+        if (visited.has(key) || !isPositionValid(neighbour) || isBlocked(neighbour)) continue;
+        visited.set(key, { pos: neighbour, parent: posKey(tile), depth });
+        next.push(neighbour);
+      }
+    }
+    frontier = next;
+  }
+  return visited;
+};
+
+/**
+ * Shortest walkable path from `from` to `to` within `maxSteps` Move points,
+ * as the sequence of tiles to step onto (excluding `from`). Returns null when
+ * `to` is blocked, off-board, or out of range.
+ */
+export const findPath = (
+  from: Position,
+  to: Position,
+  maxSteps: number,
+  isBlocked: (pos: Position) => boolean
+): Position[] | null => {
+  if (!isPositionValid(to) || isBlocked(to)) return null;
+  if (from.x === to.x && from.y === to.y) return null;
+  const visited = bfsParents(from, maxSteps, isBlocked);
+  const goal = visited.get(posKey(to));
+  if (!goal) return null;
+  const path: Position[] = [];
+  for (let node = goal; node.parent !== null; node = visited.get(node.parent)!) {
+    path.unshift(node.pos);
+  }
+  return path;
+};
+
+/** Every tile reachable from `from` within `maxSteps` (excluding `from`). */
+export const reachableTiles = (
+  from: Position,
+  maxSteps: number,
+  isBlocked: (pos: Position) => boolean
+): Position[] =>
+  Array.from(bfsParents(from, maxSteps, isBlocked).values())
+    .filter((node) => node.depth > 0)
+    .map((node) => node.pos);
+
 // --- Kickoff formation -----------------------------------------------------
 //
 // Deterministic formation slots, shared by initial setup and every kickoff

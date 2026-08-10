@@ -43,6 +43,8 @@ The AI angle is a dual-engine setup: one LLM provides live match commentary and 
 ### The Basics
 Spellbound Gridiron is a turn-based tactical sports game played on a 12x18 grid. The objective is to score touchdowns by moving the ball into the opponent's endzone.
 
+To move, select a unit and click any highlighted tile: the unit walks the shortest path there, one Move point per square, resolving terrain (slips, hazards, slides), ball pickups, and touchdowns along the way.
+
 ### Player Roles & Stats
 
 Each player has unique stats that define their capabilities:

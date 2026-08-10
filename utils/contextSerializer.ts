@@ -9,7 +9,7 @@ Objective: Move the ball carrier into the opponent's endzone (the last row) to s
 Winning: The match ends when a team reaches 21 points (3 touchdowns), or after 16 turns, whichever comes first. The higher score wins; a tie is a draw.
 
 Mechanics:
-- Movement: Units move one square at a time to any of the 8 adjacent tiles (orthogonal or diagonal). 1 square = 1 Move point.
+- Movement: Units move in any of the 8 directions (orthogonal or diagonal); 1 square = 1 Move point. Click any highlighted reachable tile and the unit walks the shortest path there, resolving terrain on every square crossed.
 - Ball pickup: Moving onto the loose ball's tile picks it up automatically (no roll).
 - Tackling: Moving into an opponent initiates a tackle.
   - Strength vs Strength check (STR + d6 each).

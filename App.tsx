@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, awardXp, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, awardXp, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -327,12 +327,18 @@ export default function App() {
                 return;
             }
 
-            // MOVE (Empty tile)
+            // MOVE (Empty tile): click any reachable tile and the unit walks
+            // the shortest path there, resolving each step (terrain, pickup,
+            // touchdown) along the way.
             if (!clickedPlayer && isPositionValid(targetPos)) {
-                if (isAdj && selectedPlayer.movesRemaining > 0) {
-                    handleMove(selectedPlayer, targetPos);
-                } else if (!isAdj) {
-                    addLog("Move one square at a time.");
+                if (selectedPlayer.movesRemaining <= 0) return;
+                const others = getAllPlayers().filter(p => p.id !== selectedPlayer.id);
+                const blocked = (pos: Position) => !!getPlayerAtPosition(pos, others);
+                const path = findPath(selectedPlayer.position, targetPos, selectedPlayer.movesRemaining, blocked);
+                if (path) {
+                    walkPath(selectedPlayer, path);
+                } else {
+                    addLog("Can't reach that tile this turn.");
                 }
                 return;
             }
@@ -341,78 +347,81 @@ export default function App() {
 
     // --- Game Logic Actions ---
 
-    const handleMove = (player: Player, to: Position) => {
-        // Update position (movement point spent for the step taken).
-        const updatedPlayer = {
-            ...player,
-            position: to,
-            movesRemaining: player.movesRemaining - 1
-        };
+    // Walk a plotted path tile by tile. Each step spends one Move point and
+    // resolves fully (terrain, ball pickup, touchdown) before the next; a
+    // knockdown, a touchdown, or an ice slide off the plotted route stops the
+    // walk early. State commits once at the end.
+    const walkPath = (player: Player, path: Position[]) => {
+        const others = getAllPlayers().filter(p => p.id !== player.id);
+        const occupied = (pos: Position) => !!getPlayerAtPosition(pos, others);
 
+        let current: Player = { ...player };
         let newBallPos = gameState.ballPosition;
-
-        // Terrain resolves the step: Mud may slip (knockdown), a Lava hazard
-        // knocks down, Ice slides the mover one further open tile. Grass is inert.
-        const occupied = (pos: Position) => !!getPlayerAtPosition(pos, getAllPlayers());
-        const step = resolveTerrainStep(gameState.terrain, player.position, to, gameState.hazards, occupied);
-        updatedPlayer.position = step.position;
-        const landed = step.position;
-        if (step.log) addLog(step.log);
-
-        if (step.knockedDown) {
-            // A slip / hazard fall ends the action prone: no pickup, no score.
-            updatedPlayer.isStunned = true;
-            updatedPlayer.movesRemaining = 0;
-            updatedPlayer.actionTaken = true;
-            if (updatedPlayer.hasBall) {
-                updatedPlayer.hasBall = false;
-                newBallPos = scatterBall(landed);
-                addLog('The ball comes loose in the tumble!');
-            }
-            updatePlayerState(updatedPlayer, { ballPosition: newBallPos });
-            return;
-        }
-
-        // Check for Ball Pickup at the tile the mover actually came to rest on.
-        // Ball pickup is automatic with no dice roll (by design): moving onto the
-        // loose ball's tile always picks it up. This is documented in GAME_RULES.
-        if (newBallPos && landed.x === newBallPos.x && landed.y === newBallPos.y) {
-            updatedPlayer.hasBall = true;
-            newBallPos = null;
-            addLog(`${player.name} picked up the ball!`);
-        }
-
-        // Check for Touchdown
         let scoreHome = gameState.homeTeam.score;
         let scoreAway = gameState.awayTeam.score;
         let touchdown = false;
 
-        if (updatedPlayer.hasBall) {
-            if (player.team === TeamSide.HOME && landed.y >= BOARD_HEIGHT - 1) {
-                scoreHome += 7; // TD value
-                touchdown = true;
-                addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.homeTeam.name}!`);
-            } else if (player.team === TeamSide.AWAY && landed.y <= 0) {
-                scoreAway += 7;
-                touchdown = true;
-                addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.awayTeam.name}!`);
+        for (const intended of path) {
+            if (current.movesRemaining <= 0) break;
+            current = { ...current, movesRemaining: current.movesRemaining - 1 };
+
+            // Terrain resolves the step: Mud may slip (knockdown), a Lava hazard
+            // knocks down, Ice slides the mover one further open tile. Grass is inert.
+            const step = resolveTerrainStep(gameState.terrain, current.position, intended, gameState.hazards, occupied);
+            current = { ...current, position: step.position };
+            if (step.log) addLog(step.log);
+
+            if (step.knockedDown) {
+                // A slip / hazard fall ends the action prone: no pickup, no score.
+                current = { ...current, isStunned: true, movesRemaining: 0, actionTaken: true };
+                if (current.hasBall) {
+                    current = { ...current, hasBall: false };
+                    newBallPos = scatterBall(current.position);
+                    addLog('The ball comes loose in the tumble!');
+                }
+                break;
             }
+
+            // Check for Ball Pickup at the tile the mover actually came to rest on.
+            // Ball pickup is automatic with no dice roll (by design): moving onto the
+            // loose ball's tile always picks it up. This is documented in GAME_RULES.
+            if (newBallPos && current.position.x === newBallPos.x && current.position.y === newBallPos.y) {
+                current = { ...current, hasBall: true };
+                newBallPos = null;
+                addLog(`${player.name} picked up the ball!`);
+            }
+
+            // Check for Touchdown
+            if (current.hasBall) {
+                if (current.team === TeamSide.HOME && current.position.y >= BOARD_HEIGHT - 1) {
+                    scoreHome += 7; // TD value
+                    touchdown = true;
+                    addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.homeTeam.name}!`);
+                } else if (current.team === TeamSide.AWAY && current.position.y <= 0) {
+                    scoreAway += 7;
+                    touchdown = true;
+                    addLog(`TOUCHDOWN! ${player.name} scores for ${gameState.awayTeam.name}!`);
+                }
+            }
+            if (touchdown) break;
+
+            // An ice slide that pushed the mover off the plotted tile invalidates
+            // the rest of the route.
+            if (current.position.x !== intended.x || current.position.y !== intended.y) break;
         }
 
         // Reward the scorer: a touchdown is the biggest XP award and can level a
-        // player up (folded into `updatedPlayer` before it is committed).
+        // player up (folded into `current` before it is committed).
         if (touchdown) {
-            const award = awardXp(updatedPlayer, XP_AWARDS.TOUCHDOWN);
-            updatedPlayer.xp = award.player.xp;
-            updatedPlayer.level = award.player.level;
-            updatedPlayer.stats = award.player.stats;
+            const award = awardXp(current, XP_AWARDS.TOUCHDOWN);
+            current = { ...current, xp: award.player.xp, level: award.player.level, stats: award.player.stats };
             if (award.log) addLog(award.log);
         }
 
         // A touchdown can end the match (score cap reached).
         const outcome = checkWinner(scoreHome, scoreAway, gameState.turn);
 
-        updatePlayerState(updatedPlayer, {
+        updatePlayerState(current, {
             ballPosition: newBallPos,
             homeScore: scoreHome,
             awayScore: scoreAway,
@@ -793,6 +802,18 @@ export default function App() {
 
     const renderBoard = () => {
         const tiles = [];
+
+        // Highlight every tile the selected unit can walk to this turn (BFS
+        // over its remaining Move points), not just the adjacent ring.
+        const selectedForMove = getSelectedPlayer();
+        let reachableKeys = new Set<string>();
+        if (selectedForMove && !selectedForMove.actionTaken && selectedForMove.movesRemaining > 0 && interactionMode === 'DEFAULT') {
+            const others = getAllPlayers().filter(p => p.id !== selectedForMove.id);
+            const blocked = (pos: Position) => !!getPlayerAtPosition(pos, others);
+            reachableKeys = new Set(
+                reachableTiles(selectedForMove.position, selectedForMove.movesRemaining, blocked).map(p => `${p.x}-${p.y}`)
+            );
+        }
         for (let y = 0; y < BOARD_HEIGHT; y++) {
             for (let x = 0; x < BOARD_WIDTH; x++) {
                 const pos = { x, y };
@@ -800,13 +821,7 @@ export default function App() {
                 const isBall = gameState.ballPosition?.x === x && gameState.ballPosition?.y === y;
                 const selected = getSelectedPlayer();
 
-                // Valid move calculation for highlight
-                let isValidMove = false;
-                if (selected && !selected.actionTaken && selected.movesRemaining > 0 && interactionMode === 'DEFAULT') {
-                    if (isAdjacent(selected.position, pos) && !player) {
-                        isValidMove = true;
-                    }
-                }
+                const isValidMove = reachableKeys.has(`${x}-${y}`);
 
                 // Zone Check
                 let endZone = null;

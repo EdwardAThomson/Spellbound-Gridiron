@@ -30,7 +30,7 @@ import {
   WIN_SCORE,
   MAX_TURNS,
 } from './rules';
-import { kickoffPosition, FORMATION_X } from './rules';
+import { kickoffPosition, FORMATION_X, findPath, reachableTiles } from './rules';
 import { Player, PlayerRole, TeamSide, TerrainType, Weather } from '../types';
 import { ROLE_STATS } from '../constants';
 
@@ -407,6 +407,41 @@ describe('awardXp', () => {
   it('respects the documented award ordering (touchdown is worth the most)', () => {
     expect(XP_AWARDS.TOUCHDOWN).toBeGreaterThan(XP_AWARDS.TACKLE);
     expect(ROLE_GROWTH[PlayerRole.CATCHER]).toContain('skill');
+  });
+});
+
+describe('pathfinding', () => {
+  const open = () => false;
+  const wallAtX5 = (pos: { x: number; y: number }) => pos.x === 5;
+
+  it('finds the shortest king-move path and spends one Move per square', () => {
+    // (2,2) -> (5,5) is a straight diagonal: 3 steps.
+    const path = findPath({ x: 2, y: 2 }, { x: 5, y: 5 }, 8, open)!;
+    expect(path).toHaveLength(3);
+    expect(path[2]).toEqual({ x: 5, y: 5 });
+  });
+
+  it('routes around blockers instead of through them', () => {
+    // A full wall on x=5 with one gap at (5,0): the path must detour via it.
+    const wallWithGap = (pos: { x: number; y: number }) => pos.x === 5 && pos.y !== 0;
+    const path = findPath({ x: 3, y: 3 }, { x: 7, y: 3 }, 10, wallWithGap)!;
+    expect(path.some((p) => p.x === 5 && p.y === 0)).toBe(true);
+    expect(path.every((p) => !wallWithGap(p))).toBe(true);
+  });
+
+  it('returns null for blocked, out-of-range, off-board, or same-tile targets', () => {
+    expect(findPath({ x: 2, y: 2 }, { x: 5, y: 2 }, 10, wallAtX5)).toBeNull();
+    expect(findPath({ x: 2, y: 2 }, { x: 9, y: 2 }, 3, open)).toBeNull();
+    expect(findPath({ x: 2, y: 2 }, { x: -1, y: 2 }, 3, open)).toBeNull();
+    expect(findPath({ x: 2, y: 2 }, { x: 2, y: 2 }, 3, open)).toBeNull();
+  });
+
+  it('reachableTiles matches the Move budget and excludes blocked tiles and the origin', () => {
+    // 1 step from a mid-board tile: the full king ring of 8.
+    expect(reachableTiles({ x: 5, y: 5 }, 1, open)).toHaveLength(8);
+    const tiles = reachableTiles({ x: 3, y: 3 }, 2, wallAtX5);
+    expect(tiles.every((p) => p.x !== 5)).toBe(true);
+    expect(tiles.some((p) => p.x === 3 && p.y === 3)).toBe(false);
   });
 });
 
