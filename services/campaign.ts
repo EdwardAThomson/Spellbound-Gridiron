@@ -234,6 +234,51 @@ export const createCampaign = (
   playerTeamId,
 });
 
+// --- Default league --------------------------------------------------------
+//
+// The four teams a fresh campaign fields, and which one the human plays. The
+// player is deliberately the second team in the list (not the first): with the
+// circle-method schedule that makes the opening fixture an AI-vs-AI one, so the
+// hub's first Continue resolves instantly rather than dropping straight into a
+// live match. Qualities are close enough that AI-vs-AI results stay competitive.
+
+export const DEFAULT_CAMPAIGN_TEAMS: CampaignTeam[] = [
+  { id: 'orcs', name: 'Orc Bashers', race: 'Dark Orcs', color: 'red', quality: 6 },
+  { id: 'elves', name: 'Elven Vanguard', race: 'High Elves', color: 'blue', quality: 6 },
+  { id: 'dwarves', name: 'Dwarf Anvils', race: 'Dwarves', color: 'gold', quality: 5 },
+  { id: 'undead', name: 'Undead Legion', race: 'Undead', color: 'purple', quality: 5 },
+];
+
+/** The team the human controls in the default league (plays their fixtures live). */
+export const DEFAULT_PLAYER_TEAM_ID = 'elves';
+
+/** Lay out a brand-new default campaign (the four teams above, player = Elves). */
+export const createDefaultCampaign = (season: number = 1): CampaignState =>
+  createCampaign(DEFAULT_CAMPAIGN_TEAMS, DEFAULT_PLAYER_TEAM_ID, season);
+
+/**
+ * Roll the league into its next season: same teams and same player, a freshly
+ * generated (all-unplayed) fixture list, and the season counter bumped. The
+ * standings reset because they are derived from the now-empty fixtures; player
+ * rosters persist independently via the roster system.
+ */
+export const startNextSeason = (campaign: CampaignState): CampaignState =>
+  createCampaign(campaign.teams, campaign.playerTeamId, campaign.season + 1);
+
+/** The first fixture still to be played, or null once the season is complete. */
+export const nextFixture = (fixtures: Fixture[]): Fixture | null =>
+  fixtures.find((f) => !f.played) ?? null;
+
+/** True when neither side of a fixture is the player's team (resolve via the sim). */
+export const isAiFixture = (fixture: Fixture, playerTeamId: string): boolean =>
+  fixture.homeId !== playerTeamId && fixture.awayId !== playerTeamId;
+
+/** The champion (top of the final table), or null if the season is not complete. */
+export const champion = (campaign: CampaignState): Standing | null => {
+  if (!isSeasonComplete(campaign.fixtures)) return null;
+  return computeStandings(campaign.teams.map((t) => t.id), campaign.fixtures)[0] ?? null;
+};
+
 /** Record a match result onto the first unplayed matching fixture, immutably. */
 export const recordResult = (
   fixtures: Fixture[],

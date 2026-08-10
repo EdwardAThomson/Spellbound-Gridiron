@@ -12,6 +12,7 @@ import GameLog from './components/GameLog';
 import HelpModal from './components/HelpModal';
 import StartOverlay from './components/StartOverlay';
 import MainMenu from './components/MainMenu';
+import CampaignHub from './components/CampaignHub';
 import TutorialCoachmark from './components/TutorialCoachmark';
 import { TUTORIAL_STEPS } from './services/tutorial';
 import SettingsModal from './components/SettingsModal';
@@ -21,6 +22,10 @@ import { LLMProvider } from './utils/llmHelper';
 import { DEFAULT_MODELS } from './constants/models';
 import { saveGame, loadGame } from './services/saveGame';
 import { saveRosters, loadRosters } from './services/roster';
+import {
+    CampaignState, Fixture, loadCampaign, saveCampaign, createDefaultCampaign,
+    startNextSeason, simulateMatch, recordResult, nextFixture,
+} from './services/campaign';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -50,7 +55,7 @@ type TargetAction = 'PASS' | 'SPELL';
 // screen; 'SETUP' is the Quick Play terrain/weather picker; 'MATCH' is the live
 // board. Quitting to the menu only flips this view -- it never touches gameState
 // or the localStorage save, so a running match is never corrupted.
-type AppView = 'MENU' | 'SETUP' | 'MATCH';
+type AppView = 'MENU' | 'SETUP' | 'MATCH' | 'CAMPAIGN';
 
 export default function App() {
     // --- State Initialization ---
@@ -106,6 +111,14 @@ export default function App() {
     // starting or exiting it never writes to the localStorage save or rosters.
     const [tutorialActive, setTutorialActive] = useState(false);
     const [tutorialStep, setTutorialStep] = useState(0);
+
+    // Campaign (league) state. `campaign` holds the active season when the
+    // Campaign hub is open (loaded from / persisted to its own versioned
+    // localStorage slot); `campaignFixture` is the fixture currently being
+    // played as a live match, so the game-over screen knows to record its
+    // result back into the season instead of offering Rematch / New Game.
+    const [campaign, setCampaign] = useState<CampaignState | null>(null);
+    const [campaignFixture, setCampaignFixture] = useState<Fixture | null>(null);
 
     // --- Helpers ---
     // Build a team's 5v5 formation. An optional `roster` overlays carried
@@ -232,6 +245,117 @@ export default function App() {
 
     // Resume the paused match after a Quit to Menu.
     const handleResume = () => setView('MATCH');
+
+    // --- Campaign ---
+    // Open the campaign hub. Resume the persisted season if one exists; otherwise
+    // lay out (and immediately persist) a fresh default league. A corrupt or
+    // missing slot degrades to a brand-new season rather than throwing.
+    const handleCampaign = () => {
+        const loaded = loadCampaign();
+        const c = loaded.ok && loaded.campaign ? loaded.campaign : createDefaultCampaign();
+        if (!loaded.ok) saveCampaign(c);
+        setCampaign(c);
+        setCampaignFixture(null);
+        setView('CAMPAIGN');
+    };
+
+    // Instantly resolve the next AI-vs-AI fixture via the pure simulator (no LLM,
+    // no live match), record it, persist, and refresh the hub.
+    const handleSimulateFixture = () => {
+        if (!campaign) return;
+        const fixture = nextFixture(campaign.fixtures);
+        if (!fixture) return;
+        const home = campaign.teams.find(t => t.id === fixture.homeId);
+        const away = campaign.teams.find(t => t.id === fixture.awayId);
+        if (!home || !away) return;
+        const result = simulateMatch(home, away, Math.random);
+        const updated = { ...campaign, fixtures: recordResult(campaign.fixtures, fixture.homeId, fixture.awayId, result) };
+        saveCampaign(updated);
+        setCampaign(updated);
+    };
+
+    // Play the player's next fixture as a normal live match. Kicks off on
+    // Grass / Clear (deterministic, keys-free) with the two campaign teams, the
+    // player always HOME; carried rosters are overlaid via the existing roster
+    // system. `campaignFixture` is stashed so the result routes back to the
+    // season when the match ends.
+    const handlePlayCampaignMatch = () => {
+        if (!campaign) return;
+        const fixture = nextFixture(campaign.fixtures);
+        if (!fixture) return;
+        const playerTeam = campaign.teams.find(t => t.id === campaign.playerTeamId);
+        const oppId = fixture.homeId === campaign.playerTeamId ? fixture.awayId : fixture.homeId;
+        const oppTeam = campaign.teams.find(t => t.id === oppId);
+        if (!playerTeam || !oppTeam) return;
+
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+        cancelTargeting();
+
+        const loaded = loadRosters();
+        const homeRoster = loaded.ok ? loaded.slots!.home : undefined;
+        const awayRoster = loaded.ok ? loaded.slots!.away : undefined;
+
+        setCampaignFixture(fixture);
+        setHasGameStarted(true);
+        setGameState({
+            turn: 1,
+            currentTeam: TeamSide.HOME,
+            selectedPlayerId: null,
+            ballPosition: { x: 6, y: 9 },
+            boardWidth: BOARD_WIDTH,
+            boardHeight: BOARD_HEIGHT,
+            terrain: TerrainType.GRASS,
+            weather: Weather.CLEAR,
+            hazards: [],
+            meteor: null,
+            homeTeam: { ...INITIAL_HOME_TEAM, name: playerTeam.name, race: playerTeam.race, color: 'blue', score: 0, players: setupTeam(TeamSide.HOME, Weather.CLEAR, homeRoster) },
+            awayTeam: { ...INITIAL_AWAY_TEAM, name: oppTeam.name, race: oppTeam.race, color: 'red', score: 0, players: setupTeam(TeamSide.AWAY, Weather.CLEAR, awayRoster) },
+            gameLog: [`Season ${campaign.season}: ${playerTeam.name} host ${oppTeam.name}. Kick off!`],
+            commentary: `Campaign match: ${playerTeam.name} take the field.`,
+            isGameOver: false,
+            winner: null,
+        });
+        setView('MATCH');
+    };
+
+    // A finished campaign match: record its score onto the fixture (mapped to the
+    // fixture's home/away orientation, since the player is always HOME on the
+    // board), persist, clear the live match, and return to the hub.
+    const handleContinueCampaign = () => {
+        if (!campaign || !campaignFixture) {
+            setCampaignFixture(null);
+            setView('CAMPAIGN');
+            return;
+        }
+        const live = gameStateRef.current;
+        const playerIsHome = campaignFixture.homeId === campaign.playerTeamId;
+        const result = playerIsHome
+            ? { homeScore: live.homeTeam.score, awayScore: live.awayTeam.score }
+            : { homeScore: live.awayTeam.score, awayScore: live.homeTeam.score };
+        const updated = { ...campaign, fixtures: recordResult(campaign.fixtures, campaignFixture.homeId, campaignFixture.awayId, result) };
+        saveCampaign(updated);
+        setCampaign(updated);
+        setCampaignFixture(null);
+
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+        setHasGameStarted(false);
+        setView('CAMPAIGN');
+    };
+
+    // Season over: roll into the next season (same teams/player, fresh fixtures,
+    // standings reset). Player rosters persist via the roster system.
+    const handleNewSeason = () => {
+        if (!campaign) return;
+        const next = startNextSeason(campaign);
+        saveCampaign(next);
+        setCampaign(next);
+    };
 
     // --- Tutorial ---
     // Launch the guided tutorial. It sets up a fresh, deterministic Grass/Clear
@@ -1271,9 +1395,21 @@ export default function App() {
                     <MainMenu
                         onQuickPlay={handleQuickPlay}
                         onSettings={() => setShowSettings(true)}
+                        onCampaign={handleCampaign}
                         onTutorial={handleTutorial}
                         canResume={hasGameStarted && !gameState.isGameOver}
                         onResume={handleResume}
+                    />
+                )}
+
+                {/* CAMPAIGN HUB (league dashboard) */}
+                {view === 'CAMPAIGN' && campaign && (
+                    <CampaignHub
+                        campaign={campaign}
+                        onPlayMatch={handlePlayCampaignMatch}
+                        onSimulate={handleSimulateFixture}
+                        onNewSeason={handleNewSeason}
+                        onBack={handleQuitToMenu}
                     />
                 )}
 
@@ -1302,29 +1438,43 @@ export default function App() {
                                 <span className="text-gray-600 text-base mx-3">VS</span>
                                 <span className="text-red-400">{gameState.awayTeam.score}</span>
                             </p>
-                            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                            {campaignFixture ? (
+                                // A campaign match: fold the result back into the season.
                                 <button
-                                    onClick={handleRematch}
-                                    title="Replay with the same teams - they keep the XP and levels they earned"
+                                    onClick={handleContinueCampaign}
+                                    data-testid="campaign-continue"
+                                    title="Record this result and return to the campaign hub"
                                     className="px-12 py-5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
                                 >
-                                    Rematch
+                                    Continue Campaign
                                 </button>
-                                <button
-                                    onClick={handleNewGame}
-                                    title="Start over with fresh teams (progression reset)"
-                                    className="px-12 py-5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
-                                >
-                                    New Game
-                                </button>
-                            </div>
-                            <button
-                                onClick={handleQuitToMenu}
-                                title="Return to the main menu"
-                                className="mt-6 text-sm text-stone-400 hover:text-stone-200 underline underline-offset-4"
-                            >
-                                🏠 Main Menu
-                            </button>
+                            ) : (
+                                <>
+                                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                        <button
+                                            onClick={handleRematch}
+                                            title="Replay with the same teams - they keep the XP and levels they earned"
+                                            className="px-12 py-5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
+                                        >
+                                            Rematch
+                                        </button>
+                                        <button
+                                            onClick={handleNewGame}
+                                            title="Start over with fresh teams (progression reset)"
+                                            className="px-12 py-5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 text-2xl font-bold tracking-widest uppercase"
+                                        >
+                                            New Game
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={handleQuitToMenu}
+                                        title="Return to the main menu"
+                                        className="mt-6 text-sm text-stone-400 hover:text-stone-200 underline underline-offset-4"
+                                    >
+                                        🏠 Main Menu
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 )}

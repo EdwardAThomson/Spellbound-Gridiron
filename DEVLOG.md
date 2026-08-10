@@ -270,3 +270,23 @@ Adds an anchored coachmark overlay that rides on top of a live Grass/Clear, keys
 
 Verify passed (exit 0): `npx playwright test e2e/tutorial.spec.ts`, 2/2. Reported full gate green (101/101 unit, 8/8 e2e) per the execute note; not re-run in this step.
 
+## 2026-08-10 — i_5fca45517a8f — Build the campaign hub UI on top of services/campaign.ts: a standings table (played/won/drawn/lost/points, 3-1-0), upcoming fixture, and Continue/Play Next Match control; player fixtures play as normal matches; AI-vs-AI fixtures resolve instantly via the pure simulator; a season-complete screen crowning the champion with a new-season flow (rosters carry over via the existing roster system, standings reset); campaign state persists under its own versioned localStorage key, resumes from the Campaign menu entry, survives reload mid-season, and degrades on corrupt/missing data; add e2e/campaign.spec.ts entering Campaign from the menu, rendering the hub, advancing a fixture, and confirming persistence across a reload.
+
+Build the campaign hub UI on top of the pure campaign model in `services/campaign.ts`.
+
+New `components/CampaignHub.tsx` renders a standings table (played/won/drawn/lost/points, 3-1-0), a season/fixtures-played counter, the next-fixture card, and one contextual Continue control: "Play Your Match" when the player's team is up next, "Simulate Next Fixture" for AI-vs-AI. When every fixture is played it flips to a season-complete screen crowning the champion with a New Season button.
+
+`App.tsx` gains a `'CAMPAIGN'` view plus `campaign` / `campaignFixture` state and handlers: `handleCampaign` resumes the persisted season or lays out and persists a fresh default league (degrading to a new season on corrupt/missing data); `handleSimulateFixture` resolves the next AI-vs-AI fixture instantly via the pure simulator; `handlePlayCampaignMatch` starts the player's fixture as a normal Grass/Clear match with rosters overlaid; `handleContinueCampaign` records the finished match's score back onto the fixture (mapped to fixture orientation, player always HOME), persists, and returns to the hub; `handleNewSeason` rolls into the next season. The game-over screen shows a single "Continue Campaign" button for campaign matches instead of Rematch/New Game.
+
+`services/campaign.ts` adds `DEFAULT_CAMPAIGN_TEAMS` / `DEFAULT_PLAYER_TEAM_ID` (player is the second team so the opening fixture is AI-vs-AI), `createDefaultCampaign`, `startNextSeason` (same teams/player, fresh fixtures, standings reset, season bumped), `nextFixture`, `isAiFixture`, and `champion`. Covered by 25 campaign unit tests in `services/campaign.test.ts` (default league, season progression, champion crowning).
+
+`e2e/campaign.spec.ts` (new) enters Campaign from the menu with no API keys, renders the four-team standings table, advances the opening AI-vs-AI fixture instantly, and reloads the page to prove the season survives from its versioned localStorage slot. `e2e/menu.spec.ts` updated: Campaign is now enabled.
+
+Known simplification: quitting mid-campaign-match then re-entering Campaign abandons that live match's progress (the fixture stays replayable) rather than resuming it. No docs edits needed; no in-match rule changed.
+
+Verify passed (exit 0): `npx playwright test e2e/campaign.spec.ts`. Full `npm run check` reported green by the previous step: 108 unit tests across 5 files, all 9 e2e specs.
+
+---
+
+Note for next step: Campaign hub item complete and verified, all green. Worktree holds 6 changed files (+490 -24), left unstaged for the harness to commit.
+

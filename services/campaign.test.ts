@@ -17,6 +17,13 @@ import {
   deserializeCampaign,
   saveCampaign,
   loadCampaign,
+  DEFAULT_CAMPAIGN_TEAMS,
+  DEFAULT_PLAYER_TEAM_ID,
+  createDefaultCampaign,
+  startNextSeason,
+  nextFixture,
+  isAiFixture,
+  champion,
 } from './campaign';
 import { KeyValueStore } from './saveGame';
 import { PlayerRole } from '../types';
@@ -193,6 +200,82 @@ describe('season lifecycle', () => {
     }
     expect(isSeasonComplete(fixtures)).toBe(true);
     expect(isSeasonComplete([])).toBe(false);
+  });
+});
+
+describe('default league', () => {
+  it('fields four teams and hands the player the second one', () => {
+    expect(DEFAULT_CAMPAIGN_TEAMS).toHaveLength(4);
+    // Player is deliberately index 1 so the opening fixture is AI-vs-AI.
+    expect(DEFAULT_PLAYER_TEAM_ID).toBe(DEFAULT_CAMPAIGN_TEAMS[1].id);
+  });
+
+  it('createDefaultCampaign lays out a full season with the player set', () => {
+    const c = createDefaultCampaign();
+    expect(c.season).toBe(1);
+    expect(c.teams).toEqual(DEFAULT_CAMPAIGN_TEAMS);
+    expect(c.playerTeamId).toBe(DEFAULT_PLAYER_TEAM_ID);
+    expect(c.fixtures).toHaveLength(12);
+  });
+
+  it("opens on an AI-vs-AI fixture so the hub's first Continue simulates", () => {
+    const c = createDefaultCampaign();
+    const first = nextFixture(c.fixtures)!;
+    expect(first).toBeTruthy();
+    expect(isAiFixture(first, c.playerTeamId)).toBe(true);
+  });
+
+  it('flags the player-team fixtures as non-AI', () => {
+    const c = createDefaultCampaign();
+    const playerFixture = c.fixtures.find(
+      (f) => f.homeId === c.playerTeamId || f.awayId === c.playerTeamId
+    )!;
+    expect(isAiFixture(playerFixture, c.playerTeamId)).toBe(false);
+  });
+});
+
+describe('season progression', () => {
+  it('nextFixture returns the first unplayed fixture, then null when complete', () => {
+    let c = createDefaultCampaign();
+    const first = nextFixture(c.fixtures)!;
+    expect(first.played).toBe(false);
+    let fixtures = c.fixtures;
+    for (const f of fixtures) {
+      if (!f.played) fixtures = recordResult(fixtures, f.homeId, f.awayId, { homeScore: 7, awayScore: 0 });
+    }
+    expect(nextFixture(fixtures)).toBeNull();
+  });
+
+  it('startNextSeason keeps the teams/player but resets the fixtures and bumps the season', () => {
+    let c = createDefaultCampaign();
+    c = { ...c, fixtures: recordResult(c.fixtures, c.fixtures[0].homeId, c.fixtures[0].awayId, { homeScore: 14, awayScore: 0 }) };
+    const next = startNextSeason(c);
+    expect(next.season).toBe(2);
+    expect(next.teams).toEqual(c.teams);
+    expect(next.playerTeamId).toBe(c.playerTeamId);
+    expect(next.fixtures.every((f) => !f.played)).toBe(true);
+    // Standings reset: nobody has played anything in the new season.
+    expect(computeStandings(next.teams.map((t) => t.id), next.fixtures).every((r) => r.played === 0)).toBe(true);
+  });
+
+  it('champion is null mid-season and crowns the table leader once complete', () => {
+    let c = createDefaultCampaign();
+    expect(champion(c)).toBeNull();
+    let fixtures = c.fixtures;
+    // Make the first team win everything so the champion is deterministic.
+    const leader = c.teams[0].id;
+    for (const f of fixtures) {
+      if (f.played) continue;
+      const homeWins = f.homeId === leader;
+      const awayWins = f.awayId === leader;
+      const score = homeWins ? { homeScore: 21, awayScore: 0 }
+        : awayWins ? { homeScore: 0, awayScore: 21 }
+        : { homeScore: 7, awayScore: 7 };
+      fixtures = recordResult(fixtures, f.homeId, f.awayId, score);
+    }
+    c = { ...c, fixtures };
+    expect(isSeasonComplete(c.fixtures)).toBe(true);
+    expect(champion(c)!.teamId).toBe(leader);
   });
 });
 
