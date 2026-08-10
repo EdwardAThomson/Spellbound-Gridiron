@@ -20,7 +20,10 @@ test('a player earns XP after scoring a touchdown', async ({ page }) => {
   await page.goto('/');
 
   // Kick off on the default Grass / Clear field (no terrain/weather selection).
+  // Pick Hotseat so the AWAY turn is human-controlled: this test hands the turn
+  // to AWAY and expects it to sit still rather than have the computer play it.
   await page.getByRole('button', { name: /quick play/i }).click();
+  await page.getByTestId('opponent-picker').getByRole('button', { name: /hotseat/i }).click();
   await page.getByRole('button', { name: /start match/i }).click();
   await expect(page.getByText(/turn 1/i)).toBeVisible();
 

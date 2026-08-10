@@ -42,7 +42,7 @@ The AI angle is a dual-engine setup: one LLM provides live match commentary and 
 
 The game opens on a fantasy-styled **main menu** with four entries. You can return to the menu from inside a match at any time via **Quit to Menu** (and from the game-over screen), all without a page reload, and doing so never clobbers a running match's saved state.
 
-- **Quick Play**: a one-off exhibition match. Pick the pitch and the sky on the start screen, then play a standard 5v5 game to 21 points or 16 turns.
+- **Quick Play**: a one-off exhibition match. Pick the pitch, the sky and your **opponent** (Hotseat or Computer) on the start screen, then play a standard 5v5 game to 21 points or 16 turns.
 - **Campaign**: a first-playable league season (see below).
 - **Tutorial**: a short, skippable guided walkthrough (see below). Runs on Grass / Clear and needs no API keys.
 - **Settings**: the dual-engine provider/model configuration (also reachable via the gear icon in-game).
@@ -55,6 +55,12 @@ Campaign runs a **4-team double round-robin**: every team meets every other team
 -   **AI-vs-AI fixtures** resolve instantly through a pure, non-LLM simulator that derives a score from each team's overall quality: no keys, no network. Each fixture's randomness comes from a seeded PRNG keyed on the season number and the fixture's identity (round and the two teams), not the wall clock, so an AI-vs-AI season is genuinely reproducible: it replays to exactly the same results every time.
 -   When every fixture is played, a **season-complete** screen crowns the champion and offers a **new season**: rosters carry over (via the persistent roster system), and the standings reset.
 -   The campaign persists under its own **versioned localStorage** slot, separate from the single-match save and the roster slots. It resumes from the Campaign menu entry, survives a reload mid-season, and degrades gracefully (to "no usable campaign") on corrupt or missing data rather than loading a half-broken season.
+
+### Computer opponent
+
+Quick Play lets you pick your opponent on the start screen: **Hotseat** (two players share one keyboard) or **Computer** (the default). Every campaign fixture you play is against the Computer as well. The Computer is a **rules-based opponent** brain, not a language model, so it needs no API keys and never calls out to the network: it plans a whole turn as an ordered list of plain-data actions and plays them out through the same handlers a human uses.
+
+Its heuristics chase the loose ball, drive the ball carrier toward the correct endzone (passing to a better-placed team-mate or, as a Wizard, blinking past a wall when boxed in), throw favourable tackles (and always hit the enemy carrier to jar the ball loose), spend Wizard mana on Fireball / Revitalize, and steer around lava and telegraphed meteors. The plan always terminates within a hard action cap, so a computer turn can never stall. While it plays, a **"Computer's turn"** indicator shows and the board is read-only; **Quit to Menu** mid-turn is safe (the match pauses and resumes cleanly). The pure planner lives in `services/opponent.ts` and is unit-tested in `services/opponent.test.ts`.
 
 ### Tutorial
 

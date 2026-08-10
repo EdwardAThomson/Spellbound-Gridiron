@@ -43,6 +43,7 @@ Mechanics:
   - Level thresholds (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.
 - Rosters: When a match ends, both teams' rosters (each player's XP, level and stat bumps) are saved to persistent named slots. The post-game Rematch button starts a fresh match reusing those rosters, so the same veterans return with the progression they earned; New Game instead fields fresh teams. Corrupt or missing roster data degrades gracefully to fresh teams.
 - Modes: The game is reached from a main menu. A match may be a one-off Quick Play exhibition, one fixture of a Campaign league season (a 4-team double round-robin scored on the 3-1-0 win-draw-loss system, where fixtures the human does not play are resolved by a non-LLM simulator), or a scripted Tutorial that teaches the controls by doing. The in-match rules above are identical in every mode.
+- Opponent: Quick Play offers a Hotseat or Computer opponent (Computer by default); campaign fixtures you play are always against the Computer. The Computer is a deterministic, rules-based opponent brain, not a language model: it chases the loose ball, drives its carrier at the correct endzone, throws favourable tackles and sensible passes, spends Wizard mana, and steers around hazards. While it plays, the board shows a "Computer's turn" indicator and is read-only; it always ends its turn in a bounded number of actions.
 `;
 
 export function serializeGameState(state: GameState): string {

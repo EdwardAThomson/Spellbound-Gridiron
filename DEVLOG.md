@@ -339,3 +339,17 @@ Verify: exit 0, all 3 checks passed. Planner exported with no LLM references (V1
 
 Note for the next step: item complete, both files are in the worktree ready for the harness commit; no git operations performed. For the wiring task (item 3): `planOpponentTurn(state, rng, side=state.currentTeam)` returns an ordered `OpponentAction[]` ending in one `pass-turn`, capped at `MAX_OPPONENT_ACTIONS` (64), each action carrying a `reason` string for the opponent-turn indicator. Action fields map to existing App handlers (`move.to`/`path`, `tackle.targetId`, `pass.to`/`targetId`, `spell.spell`/`target`); dice outcomes still resolve in those handlers. No type-check gate exists (Vite transpiles, `tsc` not in build), so vitest/esbuild is the practical check.
 
+## 2026-08-10 — i_e9fba7eda6e0 — Wire the opponent into the game: Quick Play Hotseat/Computer selector (default Computer), campaign player-fixtures default the other team to Computer, a visible opponent-turn indicator, paced action execution through existing handlers, safe quit-to-menu mid-turn, Playwright coverage of a Quick Play and a campaign match vs Computer, and consistent docs across GAME_RULES, Help/RuleBookModal, README.md and CLAUDE.md.
+
+i_e9fba7eda6e0: Wire rules-based Computer opponent into the game.
+
+Added Quick Play Hotseat/Computer selector (`StartOverlay`, default Computer) and threaded `opponentType`/`computerSide`/`opponentPlan` state through `App.tsx`. Campaign player-fixtures force the AWAY team to Computer. Two effects plan a turn (seeded per turn number) via `planOpponentTurn` and pace its actions through the existing human handlers (`walkPath`/`handleTackle`/`handlePass`/`handleCastSpell`/`endTurn`), with each action re-checked against the live board. Board is read-only and an "opponent-indicator" ("Computer's turn") shows while it plays; Quit to Menu mid-turn stops the plan and Resume re-plans.
+
+New `e2e/opponent.spec.ts` covers a Quick Play and a campaign match vs Computer; `xp` and `rematch` specs opt into Hotseat since they drive AWAY by hand. Docs kept consistent across `GAME_RULES` (contextSerializer), HelpModal, README.md, and CLAUDE.md.
+
+Gate green: 129 unit tests + 11 e2e pass; all five verify greps pass.
+
+Known, in-scope-acceptable: loaded saves resume as Hotseat (opponent choice not persisted), and a mid-turn touchdown's 2s kickoff reset can briefly overlap remaining paced opponent actions (same as human play).
+
+Note for next step: Item complete and verified, worktree intact and untouched by me. No git writes performed. Ready for the harness to commit.
+

@@ -17,6 +17,7 @@ const CONTROLS: { label: string; text: string }[] = [
     { label: 'Pass / spell targeting', text: 'Choose Pass or a spell, then click the target tile. Cancel Action aborts targeting without spending the turn.' },
     { label: 'End Action', text: "Finish the selected unit's turn without moving it any further." },
     { label: 'End Turn', text: 'Hand play to the other team once your units are done.' },
+    { label: 'Opponent (Quick Play)', text: 'On the start screen choose Hotseat (two humans share the keyboard) or Computer (the rules-based opponent runs the AWAY team). Computer is the default; campaign matches you play are always against the Computer. While the Computer plays, the board is read-only.' },
     { label: 'Save / Load', text: 'Save writes the current match to this browser; Load restores the last saved match.' },
     { label: 'Rematch', text: 'On the game-over screen, Rematch replays with the same rosters so veterans keep their XP; New Game fields fresh teams.' },
     { label: 'Quit to Menu', text: 'Return to the main menu. The match is paused, not ended, and can be resumed.' },

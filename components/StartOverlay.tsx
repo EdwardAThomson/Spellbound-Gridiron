@@ -2,6 +2,10 @@ import React from 'react';
 import { TerrainType, Weather } from '../types';
 import { TERRAIN_CONFIG } from '../constants';
 
+// Who controls the AWAY team in a Quick Play match: a second human on the same
+// keyboard (Hotseat) or the built-in rules-based Computer opponent.
+export type OpponentType = 'HOTSEAT' | 'COMPUTER';
+
 interface StartOverlayProps {
     onStart: () => void;
     isThinking?: boolean;
@@ -9,10 +13,19 @@ interface StartOverlayProps {
     onSelectTerrain: (terrain: TerrainType) => void;
     weather: Weather;
     onSelectWeather: (weather: Weather) => void;
+    // Quick Play opponent selector: Computer (default) or Hotseat.
+    opponent: OpponentType;
+    onSelectOpponent: (opponent: OpponentType) => void;
     // Return to the main menu without kicking off. Optional so the overlay still
     // works standalone; when supplied a "Back to Menu" control is shown.
     onBack?: () => void;
 }
+
+// The two opponent choices and what each means, shown as button tooltips.
+const OPPONENT_ORDER: { opponent: OpponentType; label: string; effect: string }[] = [
+    { opponent: 'COMPUTER', label: 'Computer', effect: 'The AWAY team is run by the built-in rules-based computer opponent (no API keys needed).' },
+    { opponent: 'HOTSEAT', label: 'Hotseat', effect: 'Two players share one keyboard, taking turns on the same screen.' },
+];
 
 const TERRAIN_ORDER: TerrainType[] = [
     TerrainType.GRASS,
@@ -30,7 +43,7 @@ const WEATHER_ORDER: { weather: Weather; label: string; effect: string }[] = [
     { weather: Weather.METEOR_SHOWER, label: 'Meteor Shower', effect: 'Meteors fall: a tile is telegraphed one round, then struck, knocking down anyone on it.' },
 ];
 
-export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain, weather, onSelectWeather, onBack }: StartOverlayProps) {
+export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain, weather, onSelectWeather, opponent, onSelectOpponent, onBack }: StartOverlayProps) {
     return (
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/60 backdrop-blur-md">
             <div className="text-center animate-in fade-in zoom-in duration-700">
@@ -105,6 +118,33 @@ export default function StartOverlay({ onStart, isThinking, terrain, onSelectTer
                                     }`}
                                 >
                                     {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Opponent picker: Computer (default) vs Hotseat. */}
+                <div className="mb-10" data-testid="opponent-picker">
+                    <p className="text-stone-500 uppercase tracking-widest text-[10px] font-mono mb-3">Choose your Opponent</p>
+                    <div className="flex gap-2 justify-center flex-wrap max-w-md mx-auto">
+                        {OPPONENT_ORDER.map(({ opponent: o, label, effect }) => {
+                            const active = o === opponent;
+                            return (
+                                <button
+                                    key={o}
+                                    type="button"
+                                    onClick={() => onSelectOpponent(o)}
+                                    disabled={isThinking}
+                                    aria-pressed={active}
+                                    title={effect}
+                                    className={`px-4 py-2 rounded-lg border-2 text-[11px] font-bold uppercase tracking-wider transition-all disabled:opacity-50 ${
+                                        active
+                                            ? 'border-amber-400 bg-amber-500/10 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,0.3)]'
+                                            : 'border-white/10 bg-stone-900/70 text-stone-300 hover:border-white/40'
+                                    }`}
+                                >
+                                    {o === 'COMPUTER' ? '🤖 ' : '🧑‍🤝‍🧑 '}{label}
                                 </button>
                             );
                         })}

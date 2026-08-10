@@ -10,7 +10,7 @@ import BoardTile from './components/BoardTile';
 import PlayerToken from './components/PlayerToken';
 import GameLog from './components/GameLog';
 import HelpModal from './components/HelpModal';
-import StartOverlay from './components/StartOverlay';
+import StartOverlay, { OpponentType } from './components/StartOverlay';
 import MainMenu from './components/MainMenu';
 import CampaignHub from './components/CampaignHub';
 import TutorialCoachmark from './components/TutorialCoachmark';
@@ -26,6 +26,8 @@ import {
     CampaignState, Fixture, loadCampaign, saveCampaign, createDefaultCampaign,
     startNextSeason, simulateMatch, fixtureRng, recordResult, nextFixture,
 } from './services/campaign';
+import { planOpponentTurn, OpponentAction } from './services/opponent';
+import { seededRng } from './services/rules';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -120,6 +122,19 @@ export default function App() {
     const [campaign, setCampaign] = useState<CampaignState | null>(null);
     const [campaignFixture, setCampaignFixture] = useState<Fixture | null>(null);
 
+    // Computer opponent. `opponentType` is the Quick Play selector (Computer by
+    // default; Hotseat lets two humans share the keyboard). `computerSide` is the
+    // side the built-in rules-based brain drives for the current match, or null
+    // when both sides are human (hotseat / tutorial). Campaign player-fixtures
+    // always set it to AWAY. `opponentPlan` holds the in-flight, paced turn: the
+    // ordered plain-data actions and the index of the next one to execute.
+    const [opponentType, setOpponentType] = useState<OpponentType>('COMPUTER');
+    const [computerSide, setComputerSide] = useState<TeamSide | null>(null);
+    const [opponentPlan, setOpponentPlan] = useState<{ actions: OpponentAction[]; idx: number } | null>(null);
+    // How long each opponent action lingers on screen before the next one runs,
+    // so a computer turn reads as deliberate play rather than an instant jump.
+    const OPPONENT_PACE_MS = 550;
+
     // --- Helpers ---
     // Build a team's 5v5 formation. An optional `roster` overlays carried
     // progression (XP, level, bumped stats) onto the fresh players before their
@@ -177,6 +192,9 @@ export default function App() {
         cancelPendingKickoff();
         pendingLogsRef.current = [];
         setIsAiThinking(false);
+        // The AWAY team is computer-run unless the player picked Hotseat.
+        setComputerSide(opponentType === 'COMPUTER' ? TeamSide.AWAY : null);
+        setOpponentPlan(null);
 
         setHasGameStarted(true);
         setView('MATCH');
@@ -240,6 +258,9 @@ export default function App() {
     const handleQuitToMenu = () => {
         cancelTargeting();
         setTutorialActive(false);
+        // Stop any in-flight computer turn. computerSide is left intact so a
+        // Resume picks the opponent's turn back up from the current board.
+        setOpponentPlan(null);
         setView('MENU');
     };
 
@@ -300,6 +321,11 @@ export default function App() {
         const homeRoster = loaded.ok ? loaded.slots!.home : undefined;
         const awayRoster = loaded.ok ? loaded.slots!.away : undefined;
 
+        // In a campaign fixture the human is always HOME, so the opposing club
+        // is run by the computer opponent.
+        setComputerSide(TeamSide.AWAY);
+        setOpponentPlan(null);
+
         setCampaignFixture(fixture);
         setHasGameStarted(true);
         setGameState({
@@ -347,6 +373,8 @@ export default function App() {
         pendingLogsRef.current = [];
         setIsAiThinking(false);
         setHasGameStarted(false);
+        setComputerSide(null);
+        setOpponentPlan(null);
         setView('CAMPAIGN');
     };
 
@@ -370,6 +398,9 @@ export default function App() {
         pendingLogsRef.current = [];
         setIsAiThinking(false);
         cancelTargeting();
+        // The tutorial is fully player-driven: no computer opponent takes over.
+        setComputerSide(null);
+        setOpponentPlan(null);
 
         setGameState(prev => ({
             turn: 1,
@@ -537,6 +568,8 @@ export default function App() {
 
     const handleTileClick = (x: number, y: number) => {
         if (gameState.isGameOver) return;
+        // The board is read-only while the computer opponent takes its turn.
+        if (computerSide !== null && gameState.currentTeam === computerSide) return;
 
         const targetPos = { x, y };
         const selectedPlayer = getSelectedPlayer();
@@ -865,8 +898,11 @@ export default function App() {
         });
     };
 
-    const endTurn = () => {
+    const endTurn = (fromOpponent = false) => {
         if (gameState.isGameOver) return;
+        // The human End Turn button is inert during a computer turn; only the
+        // opponent driver (fromOpponent) may end the turn it is playing out.
+        if (!fromOpponent && computerSide !== null && gameState.currentTeam === computerSide) return;
 
         let outcome = checkWinner(0, 0, 0); // placeholder; recomputed from committed state below
         setGameState(prev => {
@@ -954,6 +990,9 @@ export default function App() {
         cancelPendingKickoff();
         pendingLogsRef.current = [];
         setIsAiThinking(false);
+        // A fresh Quick Play match keeps the player's opponent choice.
+        setComputerSide(opponentType === 'COMPUTER' ? TeamSide.AWAY : null);
+        setOpponentPlan(null);
 
         setGameState(prev => ({
             turn: 1,
@@ -989,6 +1028,9 @@ export default function App() {
         const loaded = loadRosters();
         const homeRoster = loaded.ok ? loaded.slots!.home : undefined;
         const awayRoster = loaded.ok ? loaded.slots!.away : undefined;
+        // A rematch keeps the player's Quick Play opponent choice.
+        setComputerSide(opponentType === 'COMPUTER' ? TeamSide.AWAY : null);
+        setOpponentPlan(null);
 
         setGameState(prev => ({
             turn: 1,
@@ -1051,6 +1093,11 @@ export default function App() {
         pendingLogsRef.current = [];
         setIsAiThinking(false);
 
+        // A loaded match is resumed as a hotseat game: the opponent-type choice
+        // is not part of the save, so nothing auto-drives the AWAY team.
+        setComputerSide(null);
+        setOpponentPlan(null);
+
         setHasGameStarted(result.hasGameStarted ?? true);
         setGameState({
             ...result.gameState,
@@ -1058,6 +1105,93 @@ export default function App() {
         });
         cancelTargeting();
     };
+
+    // --- Computer opponent ---
+    // Translate one planned, plain-data opponent action into a call through the
+    // *existing* human handlers, so the computer plays by exactly the same rules
+    // (and dice) as a person clicking. Everything is read from the live board at
+    // execution time (the plan was drawn up from the turn's opening state, so a
+    // step may have been invalidated by an earlier action's dice outcome); each
+    // branch re-checks legality and silently skips an action that no longer
+    // applies rather than forcing an illegal move.
+    const executeOpponentAction = (action: OpponentAction) => {
+        if (gameState.isGameOver) return;
+        if (action.type === 'pass-turn') {
+            endTurn(true);
+            return;
+        }
+
+        const players = getAllPlayers();
+        const actor = players.find(p => p.id === action.playerId);
+        if (!actor || actor.isStunned || actor.actionTaken) return;
+
+        switch (action.type) {
+            case 'move': {
+                if (actor.movesRemaining <= 0) return;
+                const others = players.filter(p => p.id !== actor.id);
+                const blocked = (pos: Position) => !!getPlayerAtPosition(pos, others);
+                const path = findPath(actor.position, action.to, actor.movesRemaining, blocked);
+                if (path && path.length > 0) walkPath(actor, path);
+                break;
+            }
+            case 'tackle': {
+                const target = players.find(p => p.id === action.targetId);
+                if (target && target.team !== actor.team && actor.movesRemaining > 0 && isAdjacent(actor.position, target.position)) {
+                    handleTackle(actor, target);
+                }
+                break;
+            }
+            case 'pass': {
+                if (actor.hasBall) handlePass(actor, action.to);
+                break;
+            }
+            case 'spell': {
+                handleCastSpell(actor, action.spell, action.target);
+                break;
+            }
+        }
+    };
+
+    // Kick off a computer turn: whenever it becomes the computer-controlled
+    // side's turn on a live board, draw up the whole turn plan once. The plan is
+    // seeded deterministically from the turn number, and re-planning after a
+    // Resume is safe because already-acted units are skipped by the planner.
+    useEffect(() => {
+        if (view !== 'MATCH' || tutorialActive) return;
+        if (gameState.isGameOver) return;
+        if (computerSide === null || gameState.currentTeam !== computerSide) return;
+        if (opponentPlan) return; // a plan is already in flight
+        const seed = gameState.turn * 131 + (computerSide === TeamSide.AWAY ? 7 : 3);
+        const actions = planOpponentTurn(gameState, seededRng(seed), computerSide);
+        setOpponentPlan({ actions, idx: 0 });
+    }, [view, tutorialActive, gameState.isGameOver, gameState.currentTeam, gameState.turn, computerSide, opponentPlan]);
+
+    // Execute the in-flight plan one action at a time, paced so the turn reads as
+    // deliberate play. Each committed action bumps `idx`, which re-runs this
+    // effect with fresh handler closures (so every action sees the up-to-date
+    // board); the terminating `pass-turn` hands control back and clears the plan.
+    useEffect(() => {
+        if (!opponentPlan) return;
+        if (view !== 'MATCH' || gameState.isGameOver) {
+            setOpponentPlan(null);
+            return;
+        }
+        const { actions, idx } = opponentPlan;
+        const action = actions[idx];
+        if (!action) {
+            setOpponentPlan(null);
+            return;
+        }
+        const timer = setTimeout(() => {
+            executeOpponentAction(action);
+            if (action.type === 'pass-turn') {
+                setOpponentPlan(null);
+            } else {
+                setOpponentPlan(prev => (prev ? { ...prev, idx: prev.idx + 1 } : null));
+            }
+        }, OPPONENT_PACE_MS);
+        return () => clearTimeout(timer);
+    }, [opponentPlan, view, gameState.isGameOver]);
 
     // --- Rendering ---
 
@@ -1283,7 +1417,7 @@ export default function App() {
                     </div>
 
                     <button
-                        onClick={endTurn}
+                        onClick={() => endTurn()}
                         data-tutorial="end-turn-button"
                         className="mt-4 w-full py-4 bg-amber-700 hover:bg-amber-600 text-white font-bold uppercase tracking-widest rounded shadow-lg border border-amber-500/20 transition-colors"
                     >
@@ -1343,8 +1477,23 @@ export default function App() {
                                 onSelectTerrain={handleSelectTerrain}
                                 weather={gameState.weather}
                                 onSelectWeather={handleSelectWeather}
+                                opponent={opponentType}
+                                onSelectOpponent={setOpponentType}
                                 onBack={handleQuitToMenu}
                             />
+                        )}
+
+                        {/* Opponent-turn indicator: shown while the computer is
+                            working through its planned actions. */}
+                        {opponentPlan && (
+                            <div
+                                data-testid="opponent-indicator"
+                                className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-40"
+                            >
+                                <div className="bg-black/85 text-red-200 px-4 py-2 rounded-full border border-red-500/50 text-sm font-bold shadow-lg animate-pulse">
+                                    🤖 Computer's turn — the opponent is thinking…
+                                </div>
+                            </div>
                         )}
 
                         {/* Targeting Overlay Info */}
