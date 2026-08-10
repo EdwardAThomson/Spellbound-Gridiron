@@ -178,3 +178,16 @@ Verify passes: `services/campaign.test.ts` — exit 0, all commands green (18/18
 
 Note for next step: campaign logic is in place and green. Downstream UI-wiring items remain per the goal (campaign hub UI, playing player fixtures as real matches, season-complete/new-season flow, e2e coverage) plus reflecting the campaign in GAME_RULES/Help/README/CLAUDE.md. CampaignTeam carries a flat `quality` number, not full rosters, so revisit if AI teams need to progress across seasons.
 
+## 2026-08-10 — i_4c8831bed4af — Add a data-driven tutorial step list in services/tutorial.ts: an ordered, non-empty list of coachmark steps where each carries an anchor, plain-language text, and a completion condition; add services/tutorial.test.ts asserting the list is non-empty, ordered, and every step is well-formed (has anchor, text, and completion condition).
+
+Add data-driven tutorial step list with well-formedness tests
+
+Adds `services/tutorial.ts`: an ordered, non-empty `TUTORIAL_STEPS` list of coachmark steps, each carrying an `anchor`, plain-language `text`, and a discriminated-union `completion` condition. Steps are plain, serializable data (no closures) so they can be unit-tested and drive a deterministic "teach by doing" flow with no DOM, LLM, or API keys. Ships `TUTORIAL_COMPLETION_KINDS` and an `isTutorialStep` structural guard alongside.
+
+Adds `services/tutorial.test.ts` asserting the list is non-empty, strictly ordered by `order`, has unique ids, and that every step is well-formed (non-empty anchor and text, a valid completion kind), plus that at least one step is interactive. Separate cases cover `isTutorialStep` accepting a valid step and rejecting missing fields or an unknown completion kind.
+
+Verify green: `vitest run services/tutorial.test.ts` passed (exit 0, 7/7).
+
+---
+Note for next step: the tutorial UI layer will import `TUTORIAL_STEPS` and anchor coachmarks to the named elements (`board`, `player-token`, `reachable-tile`, `ball`, `endzone`, `end-turn-button`, `help-button`); those will need matching `data-tutorial` attributes when built. Only the scoped tutorial test was run, not the full `npm run check`; the wider suite should still be green since this item adds isolated pure-data files with no imports into existing modules.
+
