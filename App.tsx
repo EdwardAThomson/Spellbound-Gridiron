@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, awardXp, XP_AWARDS, INITIAL_MANA } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -367,6 +367,16 @@ export default function App() {
             }
         }
 
+        // Reward the scorer: a touchdown is the biggest XP award and can level a
+        // player up (folded into `updatedPlayer` before it is committed).
+        if (touchdown) {
+            const award = awardXp(updatedPlayer, XP_AWARDS.TOUCHDOWN);
+            updatedPlayer.xp = award.player.xp;
+            updatedPlayer.level = award.player.level;
+            updatedPlayer.stats = award.player.stats;
+            if (award.log) addLog(award.log);
+        }
+
         // A touchdown can end the match (score cap reached).
         const outcome = checkWinner(scoreHome, scoreAway, gameState.turn);
 
@@ -411,6 +421,11 @@ export default function App() {
                 newBallPos = scatterBall(defender.position);
                 addLog("The ball pops loose!");
             }
+
+            // A landed tackle earns the attacker XP.
+            const award = awardXp(updatedAttacker, XP_AWARDS.TACKLE);
+            updatedAttacker = award.player;
+            if (award.log) addLog(award.log);
         }
 
         updatePlayerState([updatedAttacker, updatedDefender], { ballPosition: newBallPos });
@@ -435,6 +450,11 @@ export default function App() {
                 newBallPos = targetPos; // Lands on ground
                 addLog(`The ball lands at ${targetPos.x}, ${targetPos.y}.`);
             }
+
+            // A completed pass earns the thrower XP.
+            const award = awardXp(updatedThrower, XP_AWARDS.PASS);
+            updatedThrower = award.player;
+            if (award.log) addLog(award.log);
         } else {
             newBallPos = scatterBall(targetPos);
             addLog(`Inaccurate pass! Ball lands at ${newBallPos.x}, ${newBallPos.y}.`);
@@ -465,7 +485,7 @@ export default function App() {
         addLog(`${player.name} casts ${spell.name} at ${targetPos.x},${targetPos.y}!`);
 
         // Copy both caster and target so we never mutate state in place.
-        const updatedCaster: Player = { ...player, mana: player.mana - spell.cost, actionTaken: true };
+        let updatedCaster: Player = { ...player, mana: player.mana - spell.cost, actionTaken: true };
         let updatedTarget = targetPlayer ? { ...targetPlayer } : null;
 
         if (spellKey === 'FIREBALL' && updatedTarget) {
@@ -479,6 +499,11 @@ export default function App() {
             updatedCaster.position = { ...targetPos }; // Copy, not in-place mutation.
             addLog(`${player.name} blinks across reality!`);
         }
+
+        // A successful cast earns the wizard XP.
+        const award = awardXp(updatedCaster, XP_AWARDS.SPELL);
+        updatedCaster = award.player;
+        if (award.log) addLog(award.log);
 
         const updates = [updatedCaster];
         if (updatedTarget) updates.push(updatedTarget);
@@ -796,7 +821,17 @@ export default function App() {
                                     {selectedPlayer.role === PlayerRole.WIZARD ? '🧙' : '🛡️'}
                                 </div>
                                 <h2 className="text-lg font-bold text-amber-100">{selectedPlayer.name}</h2>
-                                <p className="text-xs text-amber-500 mb-4">{selectedPlayer.role} - {selectedPlayer.team}</p>
+                                <p className="text-xs text-amber-500 mb-2">{selectedPlayer.role} - {selectedPlayer.team}</p>
+
+                                {/* Progression: level and accrued XP. */}
+                                <div className="flex items-center justify-between mb-4" data-testid="unit-progression">
+                                    <span className="text-[11px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 rounded px-2 py-0.5">
+                                        Lv {selectedPlayer.level}
+                                    </span>
+                                    <span className="text-[11px] font-mono text-cyan-300" data-testid="unit-xp">
+                                        {selectedPlayer.xp} XP
+                                    </span>
+                                </div>
 
                                 <div className="space-y-3 text-sm flex-1">
                                     <div>

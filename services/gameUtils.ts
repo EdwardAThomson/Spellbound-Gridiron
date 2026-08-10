@@ -11,8 +11,10 @@ import {
   resolveTerrainStep as resolveTerrainStepPure,
   generateLavaHazards as generateLavaHazardsPure,
   advanceMeteor as advanceMeteorPure,
+  awardXp as awardXpPure,
   StepEffect,
   MeteorResolution,
+  XpAward,
   LAVA_HAZARD_COUNT,
 } from "./rules";
 
@@ -38,8 +40,14 @@ export {
   WIN_SCORE,
   MAX_TURNS,
   LAVA_HAZARD_COUNT,
+  XP_AWARDS,
+  LEVEL_THRESHOLDS,
+  MAX_LEVEL,
+  MAX_STAT_BUMP,
+  ROLE_GROWTH,
+  levelForXp,
 } from "./rules";
-export type { StepEffect, MeteorResolution } from "./rules";
+export type { StepEffect, MeteorResolution, XpAward } from "./rules";
 
 /** Manhattan distance (kept under its historical name for existing callers). */
 export const getDistance = manhattanDistance;
@@ -64,6 +72,8 @@ export const createPlayer = (
     movesRemaining: ROLE_STATS[role].move,
     actionTaken: false,
     mana: role === PlayerRole.WIZARD ? INITIAL_MANA : 0,
+    xp: 0,
+    level: 1,
   };
 };
 
@@ -102,3 +112,7 @@ export const advanceMeteor = (
   current: MeteorWarning | null,
   upcomingTurn: number
 ): MeteorResolution => advanceMeteorPure(current, upcomingTurn, defaultRng);
+
+/** Award XP to a player (and apply any level-up bumps) using the real rng. */
+export const awardXp = (player: Player, amount: number): XpAward =>
+  awardXpPure(player, amount, defaultRng);

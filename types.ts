@@ -49,6 +49,11 @@ export interface Player {
   movesRemaining: number;
   actionTaken: boolean;
   mana: number;
+  // Progression: XP accrues from a player's plays (tackles, passes, spell casts,
+  // touchdowns) and pushes them up levels, each level granting a small,
+  // role-capped stat bump. Both persist across save/load and (later) rosters.
+  xp: number;
+  level: number;
 }
 
 export interface TeamData {

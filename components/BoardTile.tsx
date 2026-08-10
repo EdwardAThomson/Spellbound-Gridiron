@@ -200,6 +200,7 @@ const BoardTile: React.FC<BoardTileProps> = ({
   return (
     <div
       onClick={onClick}
+      data-testid={`tile-${x}-${y}`}
       className={`group relative w-full h-full border ${borderColor} ${rootState} flex items-center justify-center transition-all duration-200`}
       style={{ aspectRatio: '1/1' }}
     >

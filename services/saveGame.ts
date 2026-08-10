@@ -15,10 +15,13 @@ import { GameState, TeamSide, TerrainType, Weather } from '../types';
 
 /** Bump this whenever the persisted shape changes; old saves are then rejected. */
 // v2 added terrain hazard tiles and the meteor telegraph to the snapshot.
-export const SAVE_VERSION = 2;
+// v3 added per-player XP and level (the progression system). Old v1/v2 saves,
+// whose players carry no XP/level, are rejected gracefully by the version guard
+// rather than loaded into a half-initialised progression state.
+export const SAVE_VERSION = 3;
 
 /** The single localStorage key holding the save slot. */
-export const SAVE_KEY = 'spellbound_gridiron_save_v2';
+export const SAVE_KEY = 'spellbound_gridiron_save_v3';
 
 /** The persisted envelope: a version tag wrapping the full game snapshot. */
 export interface SaveEnvelope {

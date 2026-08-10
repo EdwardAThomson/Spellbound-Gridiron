@@ -44,6 +44,8 @@ const mkPlayer = (over: Partial<Player> = {}): Player => ({
   movesRemaining: 2,
   actionTaken: true,
   mana: 0,
+  xp: 6,
+  level: 2,
   ...over,
 });
 
@@ -127,6 +129,28 @@ describe('save round-trip fidelity', () => {
     });
     saveGame(state, true, store);
     expect(loadGame(store).gameState).toEqual(state);
+  });
+
+  it('round-trips per-player XP and level exactly', () => {
+    const store = memStore();
+    const state = mkState({
+      homeTeam: mkTeam({
+        players: [
+          mkPlayer({ id: 'HOME-0', xp: 14, level: 3 }),
+          mkPlayer({ id: 'HOME-1', role: PlayerRole.WIZARD, mana: 5, hasBall: false, xp: 0, level: 1 }),
+        ],
+      }),
+    });
+    saveGame(state, true, store);
+    const loaded = loadGame(store);
+    expect(loaded.ok).toBe(true);
+    const [scorer, wizard] = loaded.gameState!.homeTeam.players;
+    expect(scorer.xp).toBe(14);
+    expect(scorer.level).toBe(3);
+    expect(wizard.xp).toBe(0);
+    expect(wizard.level).toBe(1);
+    // And the whole snapshot still matches, XP fields included.
+    expect(loaded.gameState).toEqual(state);
   });
 
   it('writes under the versioned key with the current version tag', () => {

@@ -18,11 +18,20 @@ import {
   resolveTerrainStep,
   chooseMeteorTarget,
   advanceMeteor,
+  awardXp,
+  applyLevelBump,
+  levelForXp,
+  LEVEL_THRESHOLDS,
+  MAX_LEVEL,
+  MAX_STAT_BUMP,
+  ROLE_GROWTH,
+  XP_AWARDS,
   MUD_SLIP_CHANCE,
   WIN_SCORE,
   MAX_TURNS,
 } from './rules';
 import { Player, PlayerRole, TeamSide, TerrainType, Weather } from '../types';
+import { ROLE_STATS } from '../constants';
 
 // A fake rng that yields a fixed sequence, cycling if exhausted. This lets each
 // test pin down exactly which "roll" the rules logic sees.
@@ -43,6 +52,8 @@ const mkPlayer = (over: Partial<Player> = {}): Player => ({
   movesRemaining: 4,
   actionTaken: false,
   mana: 0,
+  xp: 0,
+  level: 1,
   ...over,
 });
 
@@ -313,6 +324,88 @@ describe('meteor telegraph', () => {
     const res = advanceMeteor(null, 1, seq([0, 0]));
     expect(res.strike).toBeNull();
     expect(res.next.strikeTurn).toBe(1);
+  });
+});
+
+describe('levelForXp', () => {
+  it('starts at level 1 and steps up at each cumulative threshold', () => {
+    expect(levelForXp(0)).toBe(1);
+    expect(levelForXp(LEVEL_THRESHOLDS[1] - 1)).toBe(1);
+    expect(levelForXp(LEVEL_THRESHOLDS[1])).toBe(2);
+    expect(levelForXp(LEVEL_THRESHOLDS[2])).toBe(3);
+    expect(levelForXp(LEVEL_THRESHOLDS[3])).toBe(4);
+    expect(levelForXp(LEVEL_THRESHOLDS[4])).toBe(MAX_LEVEL);
+  });
+
+  it('caps at the maximum level however much XP is banked', () => {
+    expect(levelForXp(9999)).toBe(MAX_LEVEL);
+  });
+});
+
+describe('applyLevelBump', () => {
+  it('raises a role growth stat by one, chosen via the rng', () => {
+    // LINEMAN growth is [strength, armor]; rng 0.99 => Math.floor(0.99*2)=1 => armor.
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    const r = applyLevelBump(PlayerRole.LINEMAN, base, seq([0.99]));
+    expect(r.bumped).toBe('armor');
+    expect(r.stats.armor).toBe(base.armor + 1);
+    expect(r.stats.strength).toBe(base.strength);
+  });
+
+  it('reports no bump when every growth stat is already capped', () => {
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    const capped = { ...base, strength: base.strength + MAX_STAT_BUMP, armor: base.armor + MAX_STAT_BUMP };
+    const r = applyLevelBump(PlayerRole.LINEMAN, capped, seq([0]));
+    expect(r.bumped).toBeNull();
+    expect(r.stats).toEqual(capped);
+  });
+});
+
+describe('awardXp', () => {
+  it('banks XP without a level-up below the next threshold', () => {
+    const r = awardXp(mkPlayer(), XP_AWARDS.TACKLE, seq([0]));
+    expect(r.player.xp).toBe(XP_AWARDS.TACKLE);
+    expect(r.player.level).toBe(1);
+    expect(r.leveledUp).toBe(false);
+    expect(r.bumped).toEqual([]);
+    expect(r.log).toBeNull();
+  });
+
+  it('levels up and applies one role-capped bump per level crossed', () => {
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    // rng always 0 => always the first eligible growth stat (strength) until capped.
+    const r = awardXp(mkPlayer(), LEVEL_THRESHOLDS[1], seq([0]));
+    expect(r.player.xp).toBe(LEVEL_THRESHOLDS[1]);
+    expect(r.player.level).toBe(2);
+    expect(r.leveledUp).toBe(true);
+    expect(r.bumped).toEqual(['strength']);
+    expect(r.player.stats.strength).toBe(base.strength + 1);
+    expect(r.log).toContain('Level 2');
+  });
+
+  it('never bumps a stat past its role cap even at max level', () => {
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    // Enough XP to hit the top level in one award; rng 0 funnels into strength,
+    // which caps at +MAX_STAT_BUMP and spills the rest into armor.
+    const r = awardXp(mkPlayer(), LEVEL_THRESHOLDS[MAX_LEVEL - 1], seq([0]));
+    expect(r.player.level).toBe(MAX_LEVEL);
+    expect(r.player.stats.strength).toBe(base.strength + MAX_STAT_BUMP);
+    expect(r.player.stats.strength - base.strength).toBeLessThanOrEqual(MAX_STAT_BUMP);
+    expect(r.player.stats.armor).toBeGreaterThan(base.armor);
+  });
+
+  it('treats a zero or negative award as a no-op that never levels down', () => {
+    const start = mkPlayer({ xp: 3, level: 1 });
+    expect(awardXp(start, 0, seq([0])).player.xp).toBe(3);
+    const neg = awardXp(start, -10, seq([0]));
+    expect(neg.player.xp).toBe(3);
+    expect(neg.player.level).toBe(1);
+    expect(neg.leveledUp).toBe(false);
+  });
+
+  it('respects the documented award ordering (touchdown is worth the most)', () => {
+    expect(XP_AWARDS.TOUCHDOWN).toBeGreaterThan(XP_AWARDS.TACKLE);
+    expect(ROLE_GROWTH[PlayerRole.CATCHER]).toContain('skill');
   });
 });
 

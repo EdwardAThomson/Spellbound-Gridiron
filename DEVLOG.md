@@ -150,3 +150,19 @@ Verify passed (exit 0, both command blocks): the grep checks find `blizzard` and
 
 Note for next step: Task 1 is complete and green in the worktree. The verify commands `cd` into the main repo path, so they only pass once the harness lands this diff. Next up is Task 2 (XP-and-progression system).
 
+## 2026-08-10 — i_44bfa1390456 — Task 2: add an XP-and-progression system (documented XP awards from tackles/passes/touchdowns/spell casts, level thresholds, role-capped stat bumps) as rng-injected pure logic in services/rules.ts with unit tests; put XP/level in GameState and survive the versioned save/load round trip (bump SAVE_VERSION, migrate or gracefully reject old saves) with unit tests; show XP/level on the left-panel unit card; add an e2e spec asserting XP visibly accrues after a scoring play.
+
+Task 2: XP-and-progression system.
+
+Adds rng-injected pure XP logic in `services/rules.ts` (`awardXp`, `levelForXp`, `applyLevelBump`, plus `XP_AWARDS`, `LEVEL_THRESHOLDS`, `MAX_LEVEL`, `MAX_STAT_BUMP`, `ROLE_GROWTH`), re-exported through `services/gameUtils.ts` with the real rng bound. Players earn XP from tackles (+2), passes (+2), spell casts (+1), and touchdowns (+5); crossing a cumulative threshold (5/12/21/32) levels a unit up to a max of 5, each level granting one role-capped stat bump.
+
+`App.tsx` awards XP after each successful tackle, pass, spell cast, and touchdown, and the left-panel unit card now shows level and accrued XP (`data-testid="unit-progression"` / `unit-xp`). `types.ts` gains `xp`/`level` on `Player`; `createPlayer` seeds them (0 / 1). Save format bumps to `SAVE_VERSION` 3 / key `spellbound_gridiron_save_v3`, so older saves are rejected gracefully by the version guard rather than half-loaded.
+
+Docs updated in lockstep: README progression section, `GAME_RULES` in `utils/contextSerializer.ts`.
+
+Tests: new unit coverage for `levelForXp`, `applyLevelBump`, and `awardXp` (no-op/negative, level-up bumps, role caps) in `services/rules.test.ts`; XP/level round-trip in `services/saveGame.test.ts`; a new `e2e/xp.spec.ts` driving a touchdown on the deterministic Grass/Clear pitch and asserting the card climbs from 0 to 5 XP.
+
+Verify passed (exit 0, all 3 predicates); `npm run check` green — 60 unit tests + 2 e2e.
+
+Note for next step (Task 3 — persistent named-slot rosters): `xp`/`level` already round-trip through save/load; carry these plus the stat bumps in `player.stats` into roster persistence. Follow the versioned-envelope pattern in `services/saveGame.ts` for a separate roster-storage module. `BoardTile` exposes `data-testid="tile-x-y"` and the unit card exposes `unit-xp`/`unit-progression`, reusable for a rematch e2e.
+

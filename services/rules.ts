@@ -1,7 +1,8 @@
 import {
-  Position, Player, TeamSide, TerrainType, Weather, MeteorWarning,
+  Position, Player, PlayerRole, PlayerStats, TeamSide, TerrainType, Weather, MeteorWarning,
   BOARD_WIDTH, BOARD_HEIGHT,
 } from '../types';
+import { ROLE_STATS } from '../constants';
 
 // Pure, deterministic game-rules logic extracted from App.tsx and gameUtils.ts.
 //
@@ -320,6 +321,127 @@ export interface MeteorResolution {
   /** The freshly telegraphed meteor for the upcoming turn. */
   next: MeteorWarning;
 }
+
+// --- XP & progression ------------------------------------------------------
+//
+// Players earn XP from the plays they make and level up into small, role-capped
+// stat bumps. Everything here is pure and rng-injected: `awardXp` folds an XP
+// gain into a player, applying one stat bump per level crossed, so the same seed
+// always grows a player the same way. `gameUtils.ts` binds the real rng and
+// `App` calls it after a successful tackle/pass/spell/touchdown.
+
+/** XP granted for each kind of play. Documented here and in GAME_RULES. */
+export const XP_AWARDS = {
+  /** Landing a successful tackle. */
+  TACKLE: 2,
+  /** Completing a pass (caught by a team-mate or landing cleanly). */
+  PASS: 2,
+  /** Casting any spell successfully. */
+  SPELL: 1,
+  /** Carrying the ball into the endzone. */
+  TOUCHDOWN: 5,
+} as const;
+
+/**
+ * Cumulative XP needed to reach each level (index i => level i + 1). A player
+ * starts at level 1 with 0 XP; the final threshold is the effective cap.
+ */
+export const LEVEL_THRESHOLDS = [0, 5, 12, 21, 32];
+
+/** The highest level reachable (the number of thresholds). */
+export const MAX_LEVEL = LEVEL_THRESHOLDS.length;
+
+/** The (1-based) level a given cumulative XP total corresponds to. */
+export const levelForXp = (xp: number): number => {
+  let level = 1;
+  for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+    if (xp >= LEVEL_THRESHOLDS[i]) level = i + 1;
+  }
+  return level;
+};
+
+/**
+ * Which stats each role raises on level-up, in preference order. A level bump
+ * picks (via the injected rng) among the role's growth stats that have not yet
+ * hit their bump cap, so growth stays flavourful but bounded to the role.
+ */
+export const ROLE_GROWTH: Record<PlayerRole, (keyof PlayerStats)[]> = {
+  [PlayerRole.LINEMAN]: ['strength', 'armor'],
+  [PlayerRole.BLITZER]: ['strength', 'move'],
+  [PlayerRole.CATCHER]: ['skill', 'move'],
+  [PlayerRole.QUARTERBACK]: ['skill', 'strength'],
+  [PlayerRole.WIZARD]: ['skill', 'strength'],
+};
+
+/** The most any single stat can rise above its role's base from level bumps. */
+export const MAX_STAT_BUMP = 3;
+
+export interface LevelBump {
+  stats: PlayerStats;
+  bumped: keyof PlayerStats | null;
+}
+
+/**
+ * Apply one level-up stat bump to `stats`, capped so no stat rises more than
+ * `MAX_STAT_BUMP` above the role's base (`ROLE_STATS`). Returns the (possibly
+ * unchanged) stats and which stat was raised, or `bumped: null` when every
+ * growth stat is already capped. Consumes one rng draw to pick among the
+ * eligible stats.
+ */
+export const applyLevelBump = (
+  role: PlayerRole,
+  stats: PlayerStats,
+  rng: Rng
+): LevelBump => {
+  const base = ROLE_STATS[role];
+  const eligible = ROLE_GROWTH[role].filter((s) => stats[s] - base[s] < MAX_STAT_BUMP);
+  if (eligible.length === 0) return { stats, bumped: null };
+  const pick = eligible[Math.floor(rng() * eligible.length)];
+  return { stats: { ...stats, [pick]: stats[pick] + 1 }, bumped: pick };
+};
+
+export interface XpAward {
+  /** The player with the XP, level and any stat bumps folded in. */
+  player: Player;
+  /** True when the award pushed the player up at least one level. */
+  leveledUp: boolean;
+  /** The stats raised by this award (one per level crossed). */
+  bumped: (keyof PlayerStats)[];
+  /** A player-facing line on a level-up, or null when nothing noteworthy. */
+  log: string | null;
+}
+
+/**
+ * Fold an XP gain into a player: add the XP, recompute the level, and apply one
+ * role-capped stat bump for every level crossed. Pure and rng-injected (each
+ * level bump consumes one rng draw). A zero or negative award only records the
+ * (unchanged) XP total and never levels down.
+ */
+export const awardXp = (player: Player, amount: number, rng: Rng): XpAward => {
+  const startLevel = levelForXp(player.xp);
+  const xp = player.xp + Math.max(0, amount);
+  const newLevel = levelForXp(xp);
+
+  let stats = player.stats;
+  const bumped: (keyof PlayerStats)[] = [];
+  for (let lvl = startLevel; lvl < newLevel; lvl++) {
+    const res = applyLevelBump(player.role, stats, rng);
+    stats = res.stats;
+    if (res.bumped) bumped.push(res.bumped);
+  }
+
+  const leveledUp = newLevel > startLevel;
+  const log = leveledUp
+    ? `${player.name} reaches Level ${newLevel}!${bumped.length ? ` (${bumped.join(', ')} up)` : ''}`
+    : null;
+
+  return {
+    player: { ...player, xp, level: newLevel, stats },
+    leveledUp,
+    bumped,
+    log,
+  };
+};
 
 /** Choose an interior impact tile for a meteor that will land on `strikeTurn`. */
 export const chooseMeteorTarget = (strikeTurn: number, rng: Rng): MeteorWarning => ({

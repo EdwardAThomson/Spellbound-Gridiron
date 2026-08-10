@@ -38,6 +38,9 @@ Mechanics:
   - SKL (Skill): Passing/Catching.
   - MOV (Move): Squares per turn.
   - ARM (Armor): Resistance to injury (flavor only for now).
+- Progression: Players earn XP from their plays and level up (max level 5). Each level grants one small, role-capped stat bump.
+  - XP awards: successful tackle +2, completed pass +2, spell cast +1, touchdown +5.
+  - Level thresholds (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.
 `;
 
 export function serializeGameState(state: GameState): string {

@@ -71,6 +71,14 @@ Pick the pitch and the sky on the start screen; both have real mechanical effect
 -   **Blizzard**: Driving snow; passes are +2 harder and every player suffers -1 Move (one fewer square per turn, minimum 1).
 -   **Meteor Shower**: A meteor tile is telegraphed one full round (shown with a ☄️), then strikes it, knocking down anyone standing there and jarring the ball loose. Clear the tile before it lands.
 
+### Progression (XP & Levels)
+
+Players grow across a match. Every play banks XP, and enough XP levels a unit up (to a maximum of level 5), granting one small stat bump capped to that role's strengths. The selected unit's card shows its current **level** and **accrued XP**.
+
+-   **XP awards**: landing a tackle **+2**, completing a pass **+2**, casting a spell **+1**, scoring a touchdown **+5**.
+-   **Level thresholds** (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.
+-   Progression is saved and restored with the match (the save format is versioned; saves from older versions are rejected rather than loaded).
+
 ## Features
 
 ### 🤖 AI Assistant (chatbot)
