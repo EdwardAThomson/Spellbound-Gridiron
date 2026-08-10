@@ -1,7 +1,27 @@
-import { Position, Player, GameState, TeamSide, BOARD_WIDTH, BOARD_HEIGHT, PlayerRole } from "../types";
+import { Position, Player, TeamSide, PlayerRole } from "../types";
 import { ROLE_STATS } from "../constants";
+import {
+  Rng,
+  rollDie,
+  manhattanDistance,
+  resolveTackle as resolveTacklePure,
+  resolvePass as resolvePassPure,
+  scatterPosition as scatterPositionPure,
+} from "./rules";
+
+// Real-game wrappers around the pure logic in `rules.ts`. These bind the
+// injectable rng to `Math.random`, so the app keeps its existing behaviour
+// while the rules themselves stay deterministically testable.
+
+const defaultRng: Rng = () => Math.random();
 
 export const INITIAL_MANA = 5;
+
+// rng-free helpers are re-exported unchanged from the pure module.
+export { isPositionValid, isAdjacent, getPlayerAtPosition } from "./rules";
+
+/** Manhattan distance (kept under its historical name for existing callers). */
+export const getDistance = manhattanDistance;
 
 export const createPlayer = (
   id: string,
@@ -26,50 +46,17 @@ export const createPlayer = (
   };
 };
 
-export const isPositionValid = (pos: Position): boolean => {
-  return pos.x >= 0 && pos.x < BOARD_WIDTH && pos.y >= 0 && pos.y < BOARD_HEIGHT;
-};
+export const rollDice = (sides: number = 6): number => rollDie(defaultRng, sides);
 
-export const getDistance = (p1: Position, p2: Position): number => {
-  return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y); // Manhattan distance
-};
+export const resolveTackle = (
+  attacker: Player,
+  defender: Player
+): { success: boolean; log: string } => resolveTacklePure(attacker, defender, defaultRng);
 
-export const isAdjacent = (p1: Position, p2: Position): boolean => {
-    const dx = Math.abs(p1.x - p2.x);
-    const dy = Math.abs(p1.y - p2.y);
-    return dx <= 1 && dy <= 1 && (dx + dy > 0); // Include diagonals
-};
+export const resolvePass = (
+  thrower: Player,
+  targetPos: Position
+): { success: boolean; log: string } => resolvePassPure(thrower, targetPos, defaultRng);
 
-export const getPlayerAtPosition = (
-  pos: Position,
-  players: Player[]
-): Player | undefined => {
-  return players.find((p) => p.position.x === pos.x && p.position.y === pos.y);
-};
-
-export const rollDice = (sides: number = 6): number => {
-    return Math.floor(Math.random() * sides) + 1;
-};
-
-export const resolveTackle = (attacker: Player, defender: Player): { success: boolean, log: string } => {
-    const attackRoll = rollDice(6) + attacker.stats.strength;
-    const defendRoll = rollDice(6) + defender.stats.strength;
-    
-    if (attackRoll > defendRoll) {
-        return { success: true, log: `${attacker.name} smashed ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!` };
-    } else {
-        return { success: false, log: `${attacker.name} bounced off ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!` };
-    }
-};
-
-export const resolvePass = (thrower: Player, targetPos: Position): { success: boolean, log: string } => {
-    const distance = Math.floor(Math.sqrt(Math.pow(targetPos.x - thrower.position.x, 2) + Math.pow(targetPos.y - thrower.position.y, 2)));
-    const difficulty = 2 + distance;
-    const roll = rollDice(6) + thrower.stats.skill;
-
-    if (roll >= difficulty) {
-         return { success: true, log: `${thrower.name} throws a perfect spiral! (Roll: ${roll} vs DC: ${difficulty})` };
-    } else {
-         return { success: false, log: `${thrower.name} fumbles the pass! (Roll: ${roll} vs DC: ${difficulty})` };
-    }
-};
+/** Scatter a loose ball using the real rng. */
+export const scatterBall = (pos: Position): Position => scatterPositionPure(pos, defaultRng);

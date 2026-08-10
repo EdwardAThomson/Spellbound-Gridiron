@@ -36,3 +36,9 @@ temp
 *.swo
 *.DS_Store
 *.Thumbs.db
+
+# Test artifacts
+screenshots/
+test-results/
+playwright-report/
+playwright/.cache/

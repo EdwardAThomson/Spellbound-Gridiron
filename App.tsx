@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, INITIAL_MANA } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, INITIAL_MANA } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -310,11 +310,7 @@ export default function App() {
 
             if (updatedDefender.hasBall) {
                 updatedDefender.hasBall = false;
-                const scatterX = defender.position.x + (Math.random() > 0.5 ? 1 : -1);
-                const scatterY = defender.position.y + (Math.random() > 0.5 ? 1 : -1);
-                const safeX = Math.max(1, Math.min(BOARD_WIDTH - 2, scatterX));
-                const safeY = Math.max(1, Math.min(BOARD_HEIGHT - 2, scatterY));
-                newBallPos = { x: safeX, y: safeY };
+                newBallPos = scatterBall(defender.position);
                 addLog("The ball pops loose!");
             }
         }
@@ -341,12 +337,8 @@ export default function App() {
                 addLog(`The ball lands at ${targetPos.x}, ${targetPos.y}.`);
             }
         } else {
-            const scatterX = targetPos.x + (Math.random() > 0.5 ? 1 : -1);
-            const scatterY = targetPos.y + (Math.random() > 0.5 ? 1 : -1);
-            const safeX = Math.max(1, Math.min(BOARD_WIDTH - 2, scatterX));
-            const safeY = Math.max(1, Math.min(BOARD_HEIGHT - 2, scatterY));
-            newBallPos = { x: safeX, y: safeY };
-            addLog(`Inaccurate pass! Ball lands at ${safeX}, ${safeY}.`);
+            newBallPos = scatterBall(targetPos);
+            addLog(`Inaccurate pass! Ball lands at ${newBallPos.x}, ${newBallPos.y}.`);
         }
 
         const updates = [updatedThrower];

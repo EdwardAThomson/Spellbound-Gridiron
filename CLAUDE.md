@@ -12,11 +12,22 @@ npm run dev                  # frontend (Vite) on port 3000, host 0.0.0.0
 npm run start:server         # CLI runner backend on port 3001 (only needed for CLI providers)
 npm run build                # vite build
 npm run preview              # serve built dist/
+
+npm test                     # Vitest unit suite (pure rules logic)
+npm run test:e2e             # Playwright chromium end-to-end smoke test
+npm run check                # unit + e2e together (the CI gate)
 ```
 
-There are no tests, linter, or formatter configured. TypeScript is `noEmit` — `tsc` is not part of the build; Vite handles transpilation. No type-check script exists.
+### Test harness
 
-The dev server is only needed if the user selects a CLI provider (`codex`, `claude-cli`, `gemini-cli`). Cloud providers (`openai`, `gemini`, `claude`) run entirely in the browser.
+Task 0 added a headless harness runnable as `npm run check` (unit then e2e):
+
+- **Unit layer (Vitest).** The pure, deterministic game rules were extracted from `App.tsx`/`gameUtils.ts` into `services/rules.ts`. Every function that needs randomness takes an injected `Rng` (`() => number`, matching `Math.random`) rather than calling a global, so rolls are seedable. `services/gameUtils.ts` now wraps those with the real `Math.random` and keeps its previous exports (`resolveTackle`, `resolvePass`, `rollDice`, `scatterBall`, …) so `App.tsx` is unaffected. Unit tests live beside the code as `*.test.ts` (e.g. `services/rules.test.ts`) and run under `vitest.config.ts`.
+- **E2E layer (Playwright).** Specs in `e2e/*.spec.ts` drive a real Chromium browser against the Vite dev server (Playwright starts it via `webServer` in `playwright.config.ts`). The smoke test runs with no API keys, so it also verifies the graceful-degradation path. `e2e/screenshot.ts` exposes `saveScreenshot(page, name)` which writes into the gitignored `screenshots/` dir; `test-results/` and `playwright-report/` are gitignored too.
+
+When adding gameplay rules, put the pure logic in `services/rules.ts` (rng-injected) and cover it in `services/rules.test.ts`. There is no linter or formatter. TypeScript is `noEmit` — `tsc` is not part of the build; Vite handles transpilation. No type-check script exists.
+
+The dev server is only needed if the user selects a CLI provider (`codex`, `claude-cli`, `gemini-cli`), or to run the Playwright e2e layer. Cloud providers (`openai`, `gemini`, `claude`) run entirely in the browser.
 
 ## Architecture
 
