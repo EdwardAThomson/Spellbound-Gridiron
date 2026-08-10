@@ -1,99 +1,63 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_1aabc755bfaa
-  generated_at: 2026-08-10T00:56:51Z
+  run_id: r_10968a13b003
+  generated_at: 2026-08-10T02:00:58Z
   regenerable: false
 ---
 
 mode: closed
 items:
-  - id: i_144638ac807e
-    statement: "Task 0: build the headless test harness \u2014 refactor rules logic out of App.tsx into a pure, rng-injectable services/rules.ts, add a Vitest unit suite, a Playwright chromium e2e layer with a gitignored screenshot helper, unify them under `npm run check`, and update CLAUDE.md to describe the harness."
+  - id: i_50727e35c8f6
+    statement: "Task 1: give Blizzard a -1 Move penalty for all players (in addition to +2 pass difficulty) in the pure rules layer, unit-test it, and make GAME_RULES, RuleBookModal, README (and CLAUDE.md) all describe Blizzard as -1 Move and +2 pass difficulty."
     kind: build
     owner: agent
     bears_on: ""
     deps: []
-    scope: ["package.json", "package-lock.json", "vitest.config.ts", "playwright.config.ts", "vite.config.ts", "tsconfig.json", "services/rules.ts", "services/gameUtils.ts", "App.tsx", "types.ts", "CLAUDE.md", ".gitignore", "tests/", "e2e/"]
+    scope: ["services/rules.ts", "services/rules.test.ts", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/rules.ts && grep -q 'export' services/rules.ts && ! grep -q 'Math.random' services/rules.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -q 'export' services/rules.ts"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && find . -path ./node_modules -prune -o -name '*.test.ts' -print | grep -q ."
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && find . -path ./node_modules -prune -o -name '*.NONEXISTENT-xyz-test.ts' -print | grep -q ."
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f playwright.config.ts && node -e \"const s=require('./package.json').scripts||{}; process.exit(s['test:e2e']&&s['test']&&s['check']?0:1)\""
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f playwright.config.ts && node -e \"const s=require('./package.json').scripts||{}; process.exit(s['test:e2e']&&s['test']&&s['check']?1:0)\""
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q 'screenshots' .gitignore && test -f CLAUDE.md && ! grep -q 'no tests, linter' CLAUDE.md"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q 'no tests, linter' CLAUDE.md"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm install --silent && (npx playwright install chromium >/dev/null 2>&1 || true) && npm run check"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! npm run check"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'blizzard' services/rules.ts && grep -iqE 'blizzard.*move|move.*blizzard' services/rules.test.ts && npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iqE 'blizzard.*move|move.*blizzard' services/rules.test.ts"
         assertion_regex: "([0-9]+) passed"
-  - id: i_81e329846244
-    statement: "Task 1: fix all six ROADMAP 'Known issues' \u2014 wrap App with ApiKeysProvider in index.tsx, batch one commentary request per action from post-action state, add a documented win condition with an input-blocking end-of-game screen, enforce spell range/target validity in services/rules.ts, sync diagonal movement and 2+manhattan pass difficulty across code and rule text, and clean up the TELEPORT mutation with documented ball pickup."
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iq blizzard README.md && grep -iq -- '-1 move' README.md && grep -iq -- '-1 move' utils/contextSerializer.ts && grep -Riq -- '-1 move' components/"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iq -- '-1 move' README.md"
+  - id: i_44bfa1390456
+    statement: "Task 2: add an XP-and-progression system (documented XP awards from tackles/passes/touchdowns/spell casts, level thresholds, role-capped stat bumps) as rng-injected pure logic in services/rules.ts with unit tests; put XP/level in GameState and survive the versioned save/load round trip (bump SAVE_VERSION, migrate or gracefully reject old saves) with unit tests; show XP/level on the left-panel unit card; add an e2e spec asserting XP visibly accrues after a scoring play."
     kind: build
     owner: agent
     bears_on: ""
-    deps: ["i_144638ac807e"]
+    deps: ["i_50727e35c8f6"]
     dep_reasons:
-      - depends_on: "i_144638ac807e"
-        reason: "Task 1 edits App.tsx and adds spell-range/target validation into services/rules.ts, both refactored/created by item 0, and its unit tests run under the vitest+`npm run check` harness item 0 sets up; shares App.tsx, services/rules.ts, types.ts, tests/, e2e/."
-    scope: ["index.tsx", "App.tsx", "services/rules.ts", "services/gameAiService.ts", "utils/contextSerializer.ts", "components/", "README.md", "ROADMAP.md", "CLAUDE.md", "types.ts", "constants.ts", "tests/", "e2e/"]
+      - depends_on: "i_50727e35c8f6"
+        reason: "Edits the same files (services/rules.ts, services/rules.test.ts, utils/contextSerializer.ts, README.md, CLAUDE.md); its diff must apply after Task 1's Blizzard edits to those files."
+    scope: ["services/rules.ts", "services/rules.test.ts", "services/saveGame.ts", "services/saveGame.test.ts", "types.ts", "App.tsx", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md", "e2e/"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q 'ApiKeysProvider' index.tsx"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -q 'ApiKeysProvider' index.tsx"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/rules.ts && grep -qiE 'fireball|blink|revitalize' services/rules.ts && grep -qiE 'range' services/rules.ts && ! grep -q 'Math.random' services/rules.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -qiE 'range' services/rules.ts"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -qiE '2 ?\\+ ?.*manhattan|manhattan.*distance' utils/contextSerializer.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -qiE '2 ?\\+ ?.*manhattan|manhattan.*distance' utils/contextSerializer.ts"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm install --silent && npx vitest run"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! npx vitest run"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -iqE 'level|xp' services/rules.test.ts && npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iqE 'xp|experience' services/rules.ts"
         assertion_regex: "([0-9]+) passed"
-  - id: i_0ccebc7d2a4a
-    statement: "Task 2: add versioned localStorage save/load \u2014 persist full GameState (plus hasGameStarted) under a versioned key, add Save/Load/New Game controls in the left panel, guarantee exact round-trip fidelity, and handle corrupt/missing saves gracefully without autosaving over the slot."
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' services/*.test.ts && grep -RiqE 'load|save|migrat|version' services/*.test.ts && npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'xp|level' services/*.test.ts"
+        assertion_regex: "([0-9]+) passed"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' e2e/ && npm run test:e2e"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'xp|level' e2e/"
+        assertion_regex: "([0-9]+) passed"
+  - id: i_5f57dbdcef8b
+    statement: "Task 3: add named-slot persistent rosters that carry teams (players with XP/levels/bumps) across matches via localStorage alongside the existing save system, with a post-game rematch flow reusing persisted rosters and graceful degradation to fresh teams on corrupt/missing data; cover roster round-trip fidelity with unit tests and the rematch flow with an e2e spec; update all rule docs, then confirm the full CI gate is green."
     kind: build
     owner: agent
     bears_on: ""
-    deps: ["i_81e329846244"]
+    deps: ["i_44bfa1390456"]
     dep_reasons:
-      - depends_on: "i_81e329846244"
-        reason: "Save/load round-trip must serialize the win-condition/game-over state fields item 1 adds and edits the same App.tsx state handlers and services/rules.ts; shares App.tsx, services/rules.ts, types.ts, components/, tests/, e2e/, so it is sequenced after item 1 to apply cleanly."
-    scope: ["App.tsx", "services/saveGame.ts", "services/rules.ts", "types.ts", "components/", "tests/", "e2e/", "README.md", "CLAUDE.md"]
+      - depends_on: "i_44bfa1390456"
+        reason: "Rosters carry the XP/levels/stat-bumps defined by Task 2, and it edits the same files (services/rules.ts, services/saveGame.ts, types.ts, App.tsx, e2e/); its diff must apply after Task 2's commit."
+    scope: ["services/rules.ts", "services/rules.test.ts", "services/saveGame.ts", "services/saveGame.test.ts", "types.ts", "App.tsx", "utils/contextSerializer.ts", "components/", "README.md", "CLAUDE.md", "e2e/"]
     verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rqi 'localStorage' services --include='*.ts' && grep -rqE '>[[:space:]]*(Save|Load)\\b' components App.tsx --include='*.tsx'"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rqi 'localStorage' services --include='*.ts'"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm install --silent && npx vitest run"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! npx vitest run"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'roster' services/rules.ts && grep -RiqE 'roster|slot' services/*.test.ts && npm test"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -RiqE 'roster' services/rules.ts"
         assertion_regex: "([0-9]+) passed"
-  - id: i_d0bbcb2628c8
-    statement: "Task 3: replace the flat gradient tiles with inline per-terrain SVG art in BoardTile for Grass/Mud/Lava/Ice with deterministic per-tile (x,y-seeded) variation, make terrain selectable on the start screen, and remove the external transparenttextures.com overlay from App.tsx."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_0ccebc7d2a4a"]
-    dep_reasons:
-      - depends_on: "i_0ccebc7d2a4a"
-        reason: "SVG terrain removes the overlay from App.tsx and adds start-screen terrain selection, editing the same App.tsx and components/ that item 2 touches; sequenced after item 2 to avoid a diff conflict on App.tsx and components/."
-    scope: ["App.tsx", "components/", "services/rules.ts", "types.ts", "constants.ts", "tests/", "e2e/", "README.md", "CLAUDE.md"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rq 'transparenttextures' --include='*.ts' --include='*.tsx' --exclude-dir=node_modules ."
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rq 'transparenttextures' --include='*.ts' --include='*.tsx' --exclude-dir=node_modules ."
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rq '<svg' components --include='*.tsx' && grep -rqiE 'Mud|Lava|Ice' components --include='*.tsx'"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rq '<svg' components --include='*.tsx'"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm install --silent && npx vitest run"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! npx vitest run"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Riq 'rematch' e2e/ && npm run test:e2e"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -Riq 'rematch' e2e/"
         assertion_regex: "([0-9]+) passed"
-  - id: i_3ce4ae81953a
-    statement: "Task 4: wire real terrain effects (Mud slip, Lava seeded hazard knockdown, Ice slide) and weather (Rain/Blizzard/Meteor Shower with one-round meteor telegraph) into services/rules.ts, telegraph risk in the UI, preserve terrain/weather/hazard/meteor state in save/load, and mirror every effect across GAME_RULES, RuleBookModal, README, and the ROADMAP checkboxes."
-    kind: build
-    owner: agent
-    bears_on: ""
-    deps: ["i_d0bbcb2628c8"]
-    dep_reasons:
-      - depends_on: "i_d0bbcb2628c8"
-        reason: "Terrain/weather mechanics build on the terrain rendering and hazard-tile SVGs from item 3 and edit the same App.tsx, services/rules.ts and components/; sequenced after item 3 (transitively after items 1 and 2, whose rules module and serializer this extends) so the shared files apply cleanly."
-    scope: ["App.tsx", "services/rules.ts", "services/saveGame.ts", "utils/contextSerializer.ts", "components/", "constants.ts", "types.ts", "README.md", "ROADMAP.md", "CLAUDE.md", "tests/", "e2e/"]
-    verify:
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -qiE 'blizzard|meteor' utils/contextSerializer.ts && grep -qiE 'blizzard|meteor' README.md && grep -rqiE 'blizzard|meteor' components --include='*.tsx' && grep -qiE 'mud|lava|ice' utils/contextSerializer.ts && ! grep -q 'Math.random' services/rules.ts"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -qiE 'blizzard|meteor' README.md"
-      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm install --silent && (npx playwright install chromium >/dev/null 2>&1 || true) && npm run check"
-        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! npm run check"
+      - command: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -Riq 'rematch' e2e/ && grep -iq -- '-1 move' utils/contextSerializer.ts && npm run check"
+        negative_control: "cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -iq -- '-1 move' utils/contextSerializer.ts"
         assertion_regex: "([0-9]+) passed"

@@ -1,45 +1,39 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_1aabc755bfaa
-  generated_at: 2026-08-10T00:56:51Z
+  run_id: r_10968a13b003
+  generated_at: 2026-08-10T02:00:58Z
   regenerable: true
 ---
 
 # Assumptions
 
-### Which win condition to implement (operator offered first-to-21 or highest-after-12-turns, 'pick one').
+### Exact XP values per event (tackle/pass/touchdown/spell), level thresholds, and per-role stat caps are unspecified.
 
-- choice: A player wins immediately on reaching 21 points; if neither reaches 21 by the end of turn 12, the higher score wins and equal scores are a draw. Documented in GAME_RULES, RuleBookModal, and README.
-- rejected: Pure highest-score-after-12-turns with no early-win threshold.
+- choice: The builder picks sensible fixed values (e.g. modest per-event XP, a small number of thresholds, caps a few points above starting ROLE_STATS) and documents them in README/GAME_RULES/RuleBookModal/CLAUDE.md.
+- rejected: Making the values operator-configurable or asking for confirmation before implementing.
 - reversal_cost: cheap
 
-### Where the extracted pure rules logic should live.
+### Whether Task 4 (league mode) should be a hard acceptance criterion.
 
-- choice: A new services/rules.ts module (legality, tackle, pass, spell validation/effects, scoring, win condition, save (de)serialization), leaving services/gameUtils.ts for the existing lower-level helpers.
-- rejected: Growing services/gameUtils.ts to hold all rules logic instead of a dedicated rules.ts.
+- choice: Treat league as conditional scope, not a gated acceptance criterion, since the prompt says to skip it entirely unless Tasks 1-3 are complete and it can be finished genuinely; a finished Tasks 1-3 is explicitly the better outcome.
+- rejected: Adding league fixtures/standings/simulation as required acceptance commands, which would fail a run that correctly skips Task 4.
 - reversal_cost: moderate
 
-### Lava terrain behaviour: knockdown-on-entry vs impassable (operator allowed either).
+### Exact literal wording used to describe the Blizzard move penalty in docs.
 
-- choice: Deterministic seeded hazard tiles that deal a knockdown (stun + ball drop) when entered, kept passable, with the hazard tiles made visually obvious in the SVG art. Documented as the chosen behaviour.
-- rejected: Making lava hazard tiles impassable.
+- choice: Require the literal phrase '-1 Move' (case-insensitive) to appear alongside Blizzard in README, GAME_RULES, and RuleBookModal so agreement is machine-checkable.
+- rejected: Accepting any paraphrase (e.g. 'reduces movement by one'), which cannot be reliably verified by command.
 - reversal_cost: cheap
 
-### Automatic ball pickup rule (Known issue #6 asks to decide and document).
+### How old/corrupt saves and rosters should be handled on schema bump.
 
-- choice: A player without the ball automatically picks it up when they occupy the loose-ball tile (end of a move step), and this is stated in GAME_RULES/RuleBookModal/README.
-- rejected: Requiring an explicit pickup action or contested pickup roll.
-- reversal_cost: cheap
+- choice: Degrade gracefully: migrate when feasible, otherwise reject the old save and roster to fresh state with a user-visible message, never crashing.
+- rejected: Silently discarding incompatible data, or hard-failing/throwing on load.
+- reversal_cost: moderate
 
-### How to make Meteor Shower tactical rather than a coin flip.
+### Whether new flows (XP accrual, rematch) require e2e coverage or unit coverage suffices.
 
-- choice: Telegraph the struck tile one full round in advance (highlighted on the board) before it resolves at the start of the next round, and persist the pending target in save state.
-- rejected: Resolving the strike on a freshly-rolled random tile in the same round with no warning.
-- reversal_cost: cheap
-
-### The prompt bundles many verifiable outcomes but only some can be honestly commanded; ROADMAP checkbox updates and pixel-level UI legibility are judgement calls.
-
-- choice: ROADMAP checkbox updates and visual legibility (contrast, button hover/disabled states, screenshot review at desktop + narrow viewports) are handled in-run and self-reviewed via the screenshot helper, but are recorded as acknowledged gaps rather than pass/fail acceptance commands, since no exit status can honestly assert them.
-- rejected: Writing a grep like `grep '\[x\]' ROADMAP.md` and calling it acceptance, which would pass on any pre-existing checked box and assert nothing about the run's work.
+- choice: Require both: pure logic unit-tested in services/rules.ts and the user-visible flows covered by Playwright specs, per the prompt's explicit e2e asks.
+- rejected: Unit-only coverage, leaving the visible UI/persistence flows unverified end-to-end.
 - reversal_cost: cheap

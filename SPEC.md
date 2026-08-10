@@ -1,57 +1,53 @@
 ---
 harness:
   generated_by: plimsoll/0.1
-  run_id: r_1aabc755bfaa
-  generated_at: 2026-08-10T00:56:51Z
+  run_id: r_10968a13b003
+  generated_at: 2026-08-10T02:00:58Z
   regenerable: true
 ---
 
 ## Goal
 
-Deliver Tasks 0-4 of the Spellbound Gridiron work order in order, each leaving the game fully playable: (0) a headless test harness (Vitest unit layer over rules logic refactored out of App.tsx into a pure, rng-injectable module, plus Playwright chromium e2e with a screenshot helper, unified under `npm run check`); (1) fix all six ROADMAP 'Known issues' (ApiKeysProvider wrapping App in index.tsx, batched one-request-per-action commentary, a documented win condition with end-of-game screen, enforced spell range/target validity, rule/code sync for diagonal movement and 2+manhattan pass difficulty, and TELEPORT mutation cleanup with documented ball pickup); (2) versioned localStorage save/load with Save/Load/New Game controls and exact round-trip fidelity; (3) inline per-terrain SVG art in BoardTile with deterministic variation, terrain selectable on the start screen, and the external transparenttextures overlay removed; (4) real terrain (Mud/Lava/Ice) and weather (Rain/Blizzard/Meteor Shower) mechanics, all mirrored across GAME_RULES, RuleBookModal, and README. LLM features must degrade gracefully with no keys/backend, tests must stub the provider layer, and every gameplay change must stay consistent across code and player-facing docs.
+Continue Spellbound Gridiron (React+TS+Vite) by fully completing, in order, three self-contained gameplay features while keeping `npm run check` green and extended: (Task 1) give Blizzard a -1 Move penalty for all players in addition to its existing +2 pass difficulty, unit-tested and reflected identically in GAME_RULES (utils/contextSerializer.ts), the RuleBookModal, and README; (Task 2) an XP-and-progression system where players earn documented XP from tackles/passes/touchdowns/spell casts, level up into small role-capped stat bumps, display XP/level on the left-panel unit card, and persist across the versioned localStorage save/load round trip (schema version bumped, old saves migrated or rejected gracefully), with pure logic rng-injected in services/rules.ts, unit-tested, plus an e2e assertion that XP visibly accrues after a scoring play; (Task 3) named-slot persistent rosters that carry teams (XP/levels/bumps) across matches with a post-game rematch flow, corrupt/missing data degrading gracefully to fresh teams, unit-tested round-trip fidelity and an e2e rematch test. Task 4 (a minimal 4-team league) is attempted only if Tasks 1-3 are complete and green, and skipped entirely otherwise. Every completed item must leave the game fully playable; no stubs; tests never call a real LLM.
 
 ## Mode
 
-closed — The operator prompt is a fixed, ordered task list (Task 0-4) with concrete, checkable end states: specific scripts (npm test / test:e2e / check), named refactors, six enumerated bug fixes, a save schema, SVG terrain, and named terrain/weather effects. The finished state can be written down in advance, so the run is judged against a checklist rather than an open-ended goal.
+closed — The end state is writable in advance: three concretely specified features with defined data (XP awards, level thresholds, role-capped stat bumps), defined persistence semantics, and named verification surfaces (services/rules.ts unit tests, e2e specs, GAME_RULES/RuleBookModal/README doc agreement). Success is a fixed, enumerable checklist rather than an open-ended exploration.
 
 ## Acceptance
 
-- A single `npm run check` gate exists and passes, running both the unit and e2e layers. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm run check`
-- A Vitest unit suite exists (the set of *.test.ts files is non-empty), covering the extracted rules logic. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && find . -path ./node_modules -prune -o -name '*.test.ts' -print | grep -q .`
-- A Playwright chromium e2e layer is configured with a webServer and a test:e2e script. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f playwright.config.ts && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts['test:e2e'] ? 0 : 1)"`
-- Rules logic is extracted into a pure services/rules.ts module that exports functions and never calls Math.random directly (randomness is injected). — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/rules.ts && grep -q 'export' services/rules.ts && ! grep -q 'Math.random' services/rules.ts`
-- services/rules.ts implements enforced spell range/target validity for the three spells. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f services/rules.ts && grep -qiE 'fireball|blink|revitalize' services/rules.ts && grep -qiE 'range' services/rules.ts`
-- ApiKeysProvider wraps the app at the entry point (index.tsx) so the game engine receives keys. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q 'ApiKeysProvider' index.tsx`
-- The external transparenttextures.com overlay is gone from all source (self-contained build). — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && ! grep -rq 'transparenttextures' --include='*.ts' --include='*.tsx' --exclude-dir=node_modules .`
-- BoardTile renders inline SVG terrain art, and the non-Grass terrains (Mud/Lava/Ice) are present in the component layer. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rq '<svg' components --include='*.tsx' && grep -rqiE 'Mud|Lava|Ice' components --include='*.tsx'`
-- Versioned localStorage persistence exists in the services layer with Save and Load controls in the UI. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -rqi 'localStorage' services --include='*.ts' && grep -rqE '>[[:space:]]*(Save|Load)\b' components App.tsx --include='*.tsx'`
-- GAME_RULES states the pass difficulty as 2 + manhattan distance, matching the code. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -qiE '2 ?\+ ?.*manhattan|manhattan.*distance' utils/contextSerializer.ts`
-- New terrain and weather mechanics are documented consistently across GAME_RULES, README, the RuleBookModal, in agreement. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -qiE 'blizzard|meteor' utils/contextSerializer.ts && grep -qiE 'blizzard|meteor' README.md && grep -rqiE 'blizzard|meteor' components --include='*.tsx' && grep -qiE 'mud|lava|ice' utils/contextSerializer.ts`
-- The screenshots directory is gitignored. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q 'screenshots' .gitignore`
-- CLAUDE.md no longer claims the project has no tests and instead describes the harness. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && test -f CLAUDE.md && ! grep -q 'no tests, linter' CLAUDE.md`
+- Blizzard applies a -1 Move penalty in the pure rules layer and a unit test covers it; the full unit suite passes. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'blizzard' services/rules.ts && grep -iqE 'blizzard.*move|move.*blizzard' services/rules.test.ts && npm test`
+- All player-facing rule descriptions agree that Blizzard is -1 Move and +2 pass difficulty (README, GAME_RULES in contextSerializer, RuleBookModal). — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iq blizzard README.md && grep -iq -- '-1 move' README.md && grep -iq -- '-1 move' utils/contextSerializer.ts && grep -Riq -- '-1 move' components/`
+- An XP/progression system exists as rng-injected pure logic in services/rules.ts (XP awards, level thresholds, role-capped stat bumps) and is unit-tested; the unit suite passes. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -iqE 'level|xp' services/rules.test.ts && npm test`
+- XP/level state is part of GameState and survives the versioned save/load round trip (schema version bumped, old saves handled), covered by unit tests that pass. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' services/*.test.ts && grep -RiqE 'load|save|migrat|version' services/*.test.ts && npm test`
+- An e2e spec asserts XP visibly accrues after a scoring play, and the Playwright suite passes. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'xp|level' e2e/ && npm run test:e2e`
+- Persistent named-slot rosters (teams with XP/levels/bumps) round-trip through localStorage with graceful degradation on corrupt/missing data, covered by passing unit tests. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -RiqE 'roster' services/rules.ts && grep -RiqE 'roster|slot' services/*.test.ts && npm test`
+- A rematch flow reusing persisted rosters after game over is covered by a passing e2e spec. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -Riq 'rematch' e2e/ && npm run test:e2e`
+- With the new logic, docs, and e2e specs in place, the full CI gate (unit + e2e) is green. — `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -iqE 'xp|experience' services/rules.ts && grep -Riq 'rematch' e2e/ && grep -iq -- '-1 move' utils/contextSerializer.ts && npm run check`
 
 ## Scope
 
-- Task 0: Vitest unit harness with rules logic refactored out of App.tsx into pure, rng-injectable functions; Playwright chromium e2e with webServer autostart and gitignored screenshot helper; unified `npm run check`.
-- Task 1: all six ROADMAP 'Known issues' in listed order (ApiKeysProvider placement, batched one-call-per-action commentary, documented win condition + end-of-game screen + input block, spell range/target enforcement with invalid-target feedback, rule/code sync for diagonal movement and 2+manhattan pass difficulty, TELEPORT mutation cleanup + documented ball pickup).
-- Task 2: versioned localStorage save/load with Save/Load/New Game controls, exact round-trip fidelity across scores/turn/team/player state/ball/terrain/weather/log, corrupt/missing-save handling, no silent autosave.
-- Task 3: inline per-terrain SVG art in BoardTile for Grass/Mud/Lava/Ice with deterministic seeded variation, start-screen terrain selection, external overlay removed.
-- Task 4: real Mud/Lava/Ice terrain effects and Rain/Blizzard/Meteor Shower weather effects, save/load preserving terrain+weather+hazard/meteor state, docs synced across GAME_RULES/RuleBookModal/README, ROADMAP checkboxes updated.
-- Graceful LLM degradation (fallback commentary, disabled assistant with a clear message) and a stubbed provider layer so tests never call a real LLM.
+- Task 1: Blizzard -1 Move penalty for all players (rng-injected pure logic in services/rules.ts), unit test, and matching updates to GAME_RULES (utils/contextSerializer.ts), RuleBookModal, and README.
+- Task 2: XP earned from tackle/pass/touchdown/spell-cast with documented values; level thresholds granting role-capped stat bumps (documented caps); XP+level shown on left-panel unit card; XP/level in GameState surviving versioned save/load (schema version bump + migrate-or-reject); pure logic unit-tested; e2e asserting XP accrues after a scoring play.
+- Task 3: named save-slot persistent rosters carrying XP/levels/bumps across matches via localStorage without breaking existing saves; post-game rematch flow reusing rosters; graceful degradation on corrupt/missing roster data; unit-tested round-trip fidelity; e2e rematch test.
+- Keep and extend the headless harness: new rules logic in services/rules.ts (rng-injected, unit-tested), new flows get Playwright coverage, provider layer stubbed so tests never call a real LLM, `npm run check` stays green.
+- Keep every added/changed mechanic in agreement across GAME_RULES (utils/contextSerializer.ts), RuleBookModal, README.md, and CLAUDE.md.
+- Maintain the UI quality bar (legible text, clickable buttons with hover/disabled states, sensible placement) and review desktop + narrow viewports via the existing gitignored screenshot helper.
+- Task 4 (conditional, not gated): a minimal 4-team league (fixtures, standings table, rng-injected rules-based simulated AI-vs-AI results, player fixtures as real matches, persisted standings) attempted ONLY if Tasks 1-3 are complete and green; otherwise skipped entirely.
 
 ## Out of scope
 
-- Stretch goals (XP/progression, persistent rosters, league mode) unless all five core tasks are complete and green, and then strictly in order.
 - Skill unlocks / skill catalog
 - Injuries
 - Tournament mode
 - Player trading
-- The world map
-- Any linter/formatter/type-check tooling beyond what the test harness requires
+- World map
+- Any rework of existing terrain/weather visuals beyond what Task 1 (Blizzard) requires
+- Adding a linter, formatter, or type-check script (TypeScript remains noEmit; Vite handles transpilation)
 
 ## Environment
 
-- Node v22.22.1 and npm 11.19.0 are available to run the harness and build. — probe: `command -v /home/edward/.nvm/versions/node/v22.22.1/bin/node && command -v /home/edward/.nvm/versions/node/v22.22.1/bin/npm`
-- The target repo is a git working tree with README.md, ROADMAP.md, CLAUDE.md, and package.json present. — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && git rev-parse --is-inside-work-tree && test -f package.json && test -f ROADMAP.md`
-- Playwright chromium must be installable/launchable headlessly for the e2e layer; the environment provides no preinstalled browser, so the harness must run `npx playwright install chromium` (or `--with-deps`) before e2e runs. — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npx --yes playwright install chromium >/dev/null 2>&1 && npx --yes playwright --version`
-- The Vite dev server binds port 3000 (frontend) and the optional CLI backend uses 3001; Playwright's webServer will start Vite on 3000. — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && grep -q '3000' vite.config.ts`
+- node is available for running the app and test harness — probe: `command -v node`
+- npm is available to run test/check scripts (npm test, npm run test:e2e, npm run check) — probe: `command -v npm`
+- Playwright chromium is installed so the e2e layer (npm run test:e2e / npm run check) can run — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npx playwright --version`
+- The existing test harness passes on the current tree before this run's work begins — probe: `cd /home/edward/Projects/octonion-software/Spellbound_Gridiron && npm run check`
