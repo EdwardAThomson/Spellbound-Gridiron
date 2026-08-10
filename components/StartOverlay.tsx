@@ -9,6 +9,9 @@ interface StartOverlayProps {
     onSelectTerrain: (terrain: TerrainType) => void;
     weather: Weather;
     onSelectWeather: (weather: Weather) => void;
+    // Return to the main menu without kicking off. Optional so the overlay still
+    // works standalone; when supplied a "Back to Menu" control is shown.
+    onBack?: () => void;
 }
 
 const TERRAIN_ORDER: TerrainType[] = [
@@ -27,7 +30,7 @@ const WEATHER_ORDER: { weather: Weather; label: string; effect: string }[] = [
     { weather: Weather.METEOR_SHOWER, label: 'Meteor Shower', effect: 'Meteors fall: a tile is telegraphed one round, then struck, knocking down anyone on it.' },
 ];
 
-export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain, weather, onSelectWeather }: StartOverlayProps) {
+export default function StartOverlay({ onStart, isThinking, terrain, onSelectTerrain, weather, onSelectWeather, onBack }: StartOverlayProps) {
     return (
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/60 backdrop-blur-md">
             <div className="text-center animate-in fade-in zoom-in duration-700">
@@ -38,6 +41,17 @@ export default function StartOverlay({ onStart, isThinking, terrain, onSelectTer
                 <p className="text-stone-400 font-mono text-sm tracking-widest mb-8">
                     Fantasy Football & ARCANE WARFARE
                 </p>
+
+                {onBack && (
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        disabled={isThinking}
+                        className="mb-6 text-xs text-stone-400 hover:text-stone-200 underline underline-offset-4 disabled:opacity-50"
+                    >
+                        ← Back to Menu
+                    </button>
+                )}
 
                 {/* Terrain picker */}
                 <div className="mb-10">

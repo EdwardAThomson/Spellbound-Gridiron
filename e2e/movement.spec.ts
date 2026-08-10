@@ -11,6 +11,7 @@ const clickTile = (page: Page, x: number, y: number) =>
 
 test('a unit walks to a clicked distant tile, spending one Move per square', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: /quick play/i }).click();
   await page.getByRole('button', { name: /start match/i }).click();
   await expect(page.getByText(/turn 1/i)).toBeVisible();
 

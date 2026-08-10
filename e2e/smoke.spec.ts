@@ -3,8 +3,14 @@ import { saveScreenshot } from './screenshot';
 
 // Smoke test with no API keys configured: the app must load and a match must be
 // startable purely from local state (LLM features degrade to canned text).
-test('the start screen renders and a match can begin without API keys', async ({ page }) => {
+test('the main menu renders and a match can begin without API keys', async ({ page }) => {
   await page.goto('/');
+
+  // The app opens on the fantasy main menu; Quick Play routes to the setup picker.
+  const quickPlay = page.getByRole('button', { name: /quick play/i });
+  await expect(quickPlay).toBeVisible();
+  await saveScreenshot(page, 'main-menu');
+  await quickPlay.click();
 
   const startButton = page.getByRole('button', { name: /start match/i });
   await expect(startButton).toBeVisible();

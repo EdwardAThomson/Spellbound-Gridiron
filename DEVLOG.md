@@ -220,3 +220,19 @@ does not exist yet).
 
 Next step: the UI items (menu, Help, Tutorial UI, Campaign hub) build the screens these docs describe.
 
+## 2026-08-10 — i_04515ee5757d — Replace the start overlay with a fantasy-styled main-menu home screen offering exactly Quick Play, Campaign, Tutorial, and Settings; fully wire Quick Play (to the existing terrain/weather+match flow) and Settings (existing modal); add a quit-to-menu control and a menu return from the game-over screen, both without a page reload and without corrupting a running match's save; add e2e/menu.spec.ts (drive the menu, start Quick Play, return to menu in-game) and update the existing e2e specs to navigate via the new menu.
+
+Replace the bare start overlay with a fantasy-styled main-menu home screen and wire the menu navigation without page reloads.
+
+The app now opens on a `MainMenu` (`components/MainMenu.tsx`) offering exactly Quick Play, Campaign, Tutorial, and Settings. Quick Play routes through the existing terrain/weather setup picker into a match; Settings opens the existing modal over the menu. Campaign and Tutorial render as visible-but-disabled ("coming soon") until later tasks supply their handlers, so the full set of modes is always shown honestly.
+
+`App.tsx` gains a top-level `AppView` (`MENU` / `SETUP` / `MATCH`) alongside the existing `hasGameStarted` flag. `handleStartGame` now kicks off from a fully clean slate (clears queued commentary and pending kickoff, resets turn/score/game-over, keeps only the picked terrain and weather) so Quick Play can be re-entered after a finished match. `handleQuitToMenu` is view-only: it cancels targeting and flips the view back to the menu without touching `gameState` or the localStorage save, so a running match is never corrupted and stays resumable; `handleResume` returns to it. A "Quit to Menu" control sits in the HUD and a "Main Menu" control on the game-over screen, both without a page reload. `StartOverlay` takes an optional `onBack` that renders a "Back to Menu" control.
+
+Coverage: new `e2e/menu.spec.ts` drives the menu (four modes present, Campaign/Tutorial disabled), opens and closes Settings, round-trips Quick Play to setup and back, kicks off a match, quits to the menu mid-match, and resumes it still on turn 1. The existing `e2e/{smoke,movement,rematch,xp}.spec.ts` specs are updated to navigate via Quick Play first; `smoke` also renames to reflect the menu.
+
+Verify passed: `npx playwright test e2e/menu.spec.ts` exited 0 (1 passed) when run in the worktree.
+
+---
+
+**Note for next step:** All work is present and verified; staged diff is 8 files (+286 -15). One caveat on the verify record: its command hardcodes the master checkout path where `e2e/menu.spec.ts` does not exist until this commit lands, so that literal path only passes post-landing or in the worktree (which is where the recorded exit 0 came from). Nothing to fix. For the Campaign/Tutorial tasks, enable their menu buttons by passing `onCampaign`/`onTutorial` to `MainMenu` and add matching `AppView` values plus screens.
+

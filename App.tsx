@@ -11,6 +11,7 @@ import PlayerToken from './components/PlayerToken';
 import GameLog from './components/GameLog';
 import RuleBookModal from './components/RuleBookModal';
 import StartOverlay from './components/StartOverlay';
+import MainMenu from './components/MainMenu';
 import SettingsModal from './components/SettingsModal';
 import AiAssistantPanel from './components/AiAssistantPanel';
 import { ApiKeysContext } from './context/ApiKeysContext';
@@ -43,6 +44,12 @@ const INITIAL_AWAY_TEAM: TeamData = {
 type InteractionMode = 'DEFAULT' | 'TARGETING';
 type TargetAction = 'PASS' | 'SPELL';
 
+// Which top-level screen is showing. The fantasy main menu ('MENU') is the home
+// screen; 'SETUP' is the Quick Play terrain/weather picker; 'MATCH' is the live
+// board. Quitting to the menu only flips this view -- it never touches gameState
+// or the localStorage save, so a running match is never corrupted.
+type AppView = 'MENU' | 'SETUP' | 'MATCH';
+
 export default function App() {
     // --- State Initialization ---
     const [gameState, setGameState] = useState<GameState>({
@@ -70,6 +77,9 @@ export default function App() {
     const { apiKeys } = useContext(ApiKeysContext);
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [hasGameStarted, setHasGameStarted] = useState(false);
+    // Top-level navigation. The app opens on the main menu; Quick Play routes to
+    // the setup picker, then into the match.
+    const [view, setView] = useState<AppView>('MENU');
 
     // AI Engine State
     const [gameProvider, setGameProvider] = useState<LLMProvider>('gemini');
@@ -137,26 +147,46 @@ export default function App() {
         weather === Weather.METEOR_SHOWER ? advanceMeteor(null, 1).next : null;
 
     const handleStartGame = async () => {
+        // Quick Play can now be re-entered from the menu after a finished match,
+        // so kick off from a fully clean slate: drop any queued commentary and
+        // pending kickoff, reset turn/score/game-over, and keep only the terrain
+        // and weather the player picked on the setup screen.
+        if (commentaryTimerRef.current) clearTimeout(commentaryTimerRef.current);
+        cancelPendingKickoff();
+        pendingLogsRef.current = [];
+        setIsAiThinking(false);
+
         setHasGameStarted(true);
+        setView('MATCH');
 
         // Instant setup with temporary names -- race and name mixed up
         setGameState(prev => ({
-            ...prev,
+            turn: 1,
+            currentTeam: TeamSide.HOME,
+            selectedPlayerId: null,
+            ballPosition: { x: 6, y: 9 },
+            boardWidth: BOARD_WIDTH,
+            boardHeight: BOARD_HEIGHT,
+            terrain: prev.terrain,
+            weather: prev.weather,
             hazards: seedHazards(prev.terrain),
             meteor: seedMeteor(prev.weather),
             homeTeam: {
-                ...prev.homeTeam,
+                ...INITIAL_HOME_TEAM,
                 name: 'Elven Vanguard',
                 race: 'High Elves',
                 players: setupTeam(TeamSide.HOME, prev.weather)
             },
             awayTeam: {
-                ...prev.awayTeam,
+                ...INITIAL_AWAY_TEAM,
                 name: 'Orc Bashers',
                 race: 'Dark Orcs',
                 players: setupTeam(TeamSide.AWAY, prev.weather)
             },
-            gameLog: ["The mystical gates open! The match begins.", ...prev.gameLog]
+            gameLog: ["The mystical gates open! The match begins."],
+            commentary: "Welcome to Spellbound Gridiron! The players are taking the field.",
+            isGameOver: false,
+            winner: null,
         }));
 
         // Fetch AI names in the background
@@ -176,6 +206,22 @@ export default function App() {
             }
         })();
     };
+
+    // --- Menu navigation ---
+    // Quick Play routes to the terrain/weather picker; the match itself begins
+    // from there via handleStartGame.
+    const handleQuickPlay = () => setView('SETUP');
+
+    // Quit to the menu from inside a match. This is view-only: it deliberately
+    // does not reset gameState or write to localStorage, so the running match
+    // stays intact in memory (resumable) and any saved match is untouched.
+    const handleQuitToMenu = () => {
+        cancelTargeting();
+        setView('MENU');
+    };
+
+    // Resume the paused match after a Quit to Menu.
+    const handleResume = () => setView('MATCH');
 
     // --- Setup Teams on Mount ---
     useEffect(() => {
@@ -1047,12 +1093,21 @@ export default function App() {
                         >New Game</button>
                     </div>
 
-                    <button
-                        onClick={() => setShowRules(true)}
-                        className="mt-2 text-xs text-stone-500 hover:text-stone-300 underline"
-                    >
-                        📖 Game Rules
-                    </button>
+                    <div className="mt-2 flex items-center justify-between">
+                        <button
+                            onClick={() => setShowRules(true)}
+                            className="text-xs text-stone-500 hover:text-stone-300 underline"
+                        >
+                            📖 Game Rules
+                        </button>
+                        <button
+                            onClick={handleQuitToMenu}
+                            title="Return to the main menu (the match stays put and can be resumed)"
+                            className="text-xs text-stone-500 hover:text-stone-300 underline"
+                        >
+                            🏠 Quit to Menu
+                        </button>
+                    </div>
                 </div>
 
                 {/* CENTER: BOARD */}
@@ -1061,8 +1116,8 @@ export default function App() {
                     {/* Field Background Wrapper */}
                     <div className={`relative rounded-lg shadow-2xl overflow-hidden border-4 border-stone-800 bg-gradient-to-br ${terrainInfo.color}`}>
 
-                        {/* START OVERLAY */}
-                        {!hasGameStarted && (
+                        {/* QUICK PLAY SETUP OVERLAY (terrain / weather picker) */}
+                        {view === 'SETUP' && (
                             <StartOverlay
                                 onStart={handleStartGame}
                                 isThinking={isAiThinking}
@@ -1070,6 +1125,7 @@ export default function App() {
                                 onSelectTerrain={handleSelectTerrain}
                                 weather={gameState.weather}
                                 onSelectWeather={handleSelectWeather}
+                                onBack={handleQuitToMenu}
                             />
                         )}
 
@@ -1117,8 +1173,18 @@ export default function App() {
                     setChatModel={setChatModel}
                 />
 
+                {/* MAIN MENU (fantasy home screen) */}
+                {view === 'MENU' && (
+                    <MainMenu
+                        onQuickPlay={handleQuickPlay}
+                        onSettings={() => setShowSettings(true)}
+                        canResume={hasGameStarted && !gameState.isGameOver}
+                        onResume={handleResume}
+                    />
+                )}
+
                 {/* END-OF-GAME SCREEN (blocks all board/HUD input) */}
-                {gameState.isGameOver && (
+                {gameState.isGameOver && view === 'MATCH' && (
                     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
                         <div className="text-center animate-in fade-in zoom-in duration-500">
                             <div className="text-6xl mb-4">🏆</div>
@@ -1147,6 +1213,13 @@ export default function App() {
                                     New Game
                                 </button>
                             </div>
+                            <button
+                                onClick={handleQuitToMenu}
+                                title="Return to the main menu"
+                                className="mt-6 text-sm text-stone-400 hover:text-stone-200 underline underline-offset-4"
+                            >
+                                🏠 Main Menu
+                            </button>
                         </div>
                     </div>
                 )}

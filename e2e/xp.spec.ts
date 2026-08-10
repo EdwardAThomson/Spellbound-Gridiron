@@ -20,6 +20,7 @@ test('a player earns XP after scoring a touchdown', async ({ page }) => {
   await page.goto('/');
 
   // Kick off on the default Grass / Clear field (no terrain/weather selection).
+  await page.getByRole('button', { name: /quick play/i }).click();
   await page.getByRole('button', { name: /start match/i }).click();
   await expect(page.getByText(/turn 1/i)).toBeVisible();
 

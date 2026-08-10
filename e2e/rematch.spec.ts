@@ -18,6 +18,7 @@ const walk = async (page: Page, path: [number, number][]) => {
 
 test('a rematch carries a scorer\'s earned XP into the next match', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: /quick play/i }).click();
   await page.getByRole('button', { name: /start match/i }).click();
   await expect(page.getByText(/turn 1/i)).toBeVisible();
 
