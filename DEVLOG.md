@@ -103,3 +103,15 @@ labels in App.tsx) and npx vitest run reports 31 passed across 2 files.
 
 Note for next step: Task 2 is complete in the worktree (M App.tsx, new services/saveGame.ts and services/saveGame.test.ts, +374). Both verify commands passed: the greps match, and `npx vitest run` reports 31 passing tests across 2 files. Save/load is additive UI only with no gameplay-rule or GAME_RULES changes, so e2e was not run and docs were left untouched. Ready for the harness to commit; next up is Task 3 (inline per-terrain SVG art in BoardTile).
 
+## 2026-08-10 — i_d0bbcb2628c8 — Task 3: replace the flat gradient tiles with inline per-terrain SVG art in BoardTile for Grass/Mud/Lava/Ice with deterministic per-tile (x,y-seeded) variation, make terrain selectable on the start screen, and remove the external transparenttextures.com overlay from App.tsx.
+
+Task 3: replace flat gradient board tiles with inline per-terrain SVG art, add start-screen terrain selection, and remove the external transparenttextures overlay.
+
+BoardTile now renders a `TerrainArt` SVG component drawing Grass/Mud/Lava/Ice, each a solid base plus decorative marks whose positions and sizes come from a deterministic `(x, y)`-seeded sin-hash, so tiles vary but stay stable across re-renders. The old flat `bg-*` base/state coloring is restructured: ring and cursor state stay on the root while endzone and interaction tints move to an overlay above the SVG (driven by `group-hover`), so a solid SVG base no longer hides the tint. StartOverlay gains a terrain picker (GRASS/MUD/LAVA/ICE from `TERRAIN_CONFIG`) wired to a new `handleSelectTerrain` handler in App.tsx, and the `transparenttextures.com/stardust.png` field overlay div is deleted from App.tsx.
+
+Verify: all 3 commands passed (no `transparenttextures` in source; `<svg` plus Mud|Lava|Ice present in components; `npm install && npx vitest run` → 31/31). Three files touched: App.tsx, components/BoardTile.tsx, components/StartOverlay.tsx.
+
+---
+
+Note for next step: Task 3 landed and fully verified (31/31 unit tests, all three verify commands green). Worktree holds exactly the three modified files staged-free for the harness; git history and index untouched. Next item is Task 4 (real Mud/Lava/Ice terrain and Rain/Blizzard/Meteor Shower weather mechanics, mirrored across GAME_RULES, RuleBookModal, and README), which builds on the terrain-selection groundwork laid here.
+

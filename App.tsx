@@ -105,6 +105,11 @@ export default function App() {
         return players;
     };
 
+    // Terrain is chosen on the start screen before the match begins.
+    const handleSelectTerrain = (terrain: TerrainType) => {
+        setGameState(prev => ({ ...prev, terrain }));
+    };
+
     const handleStartGame = async () => {
         setHasGameStarted(true);
 
@@ -824,7 +829,14 @@ export default function App() {
                     <div className={`relative rounded-lg shadow-2xl overflow-hidden border-4 border-stone-800 bg-gradient-to-br ${terrainInfo.color}`}>
 
                         {/* START OVERLAY */}
-                        {!hasGameStarted && <StartOverlay onStart={handleStartGame} isThinking={isAiThinking} />}
+                        {!hasGameStarted && (
+                            <StartOverlay
+                                onStart={handleStartGame}
+                                isThinking={isAiThinking}
+                                terrain={gameState.terrain}
+                                onSelectTerrain={handleSelectTerrain}
+                            />
+                        )}
 
                         {/* Targeting Overlay Info */}
                         {interactionMode === 'TARGETING' && (
@@ -845,9 +857,6 @@ export default function App() {
                         >
                             {renderBoard()}
                         </div>
-
-                        {/* Field Overlay Effects */}
-                        <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay"></div>
                     </div>
                 </div>
 
