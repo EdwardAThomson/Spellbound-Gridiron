@@ -9,7 +9,7 @@ import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
 import PlayerToken from './components/PlayerToken';
 import GameLog from './components/GameLog';
-import RuleBookModal from './components/RuleBookModal';
+import HelpModal from './components/HelpModal';
 import StartOverlay from './components/StartOverlay';
 import MainMenu from './components/MainMenu';
 import SettingsModal from './components/SettingsModal';
@@ -95,7 +95,7 @@ export default function App() {
     const [interactionMode, setInteractionMode] = useState<InteractionMode>('DEFAULT');
     const [targetingAction, setTargetingAction] = useState<TargetAction | null>(null);
     const [activeSpellKey, setActiveSpellKey] = useState<string | null>(null);
-    const [showRules, setShowRules] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
     const [showSpellMenu, setShowSpellMenu] = useState(false);
 
     // --- Helpers ---
@@ -1095,10 +1095,11 @@ export default function App() {
 
                     <div className="mt-2 flex items-center justify-between">
                         <button
-                            onClick={() => setShowRules(true)}
+                            onClick={() => setShowHelp(true)}
+                            title="Controls and how to play"
                             className="text-xs text-stone-500 hover:text-stone-300 underline"
                         >
-                            📖 Game Rules
+                            ❓ Help
                         </button>
                         <button
                             onClick={handleQuitToMenu}
@@ -1158,7 +1159,7 @@ export default function App() {
 
                 {/* CLI RUNNER PANEL */}
                 <AiAssistantPanel gameState={gameState} backend={chatProvider} model={chatModel} />
-                <RuleBookModal isOpen={showRules} onClose={() => setShowRules(false)} />
+                <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
 
                 <SettingsModal
                     isOpen={showSettings}

@@ -236,3 +236,23 @@ Verify passed: `npx playwright test e2e/menu.spec.ts` exited 0 (1 passed) when r
 
 **Note for next step:** All work is present and verified; staged diff is 8 files (+286 -15). One caveat on the verify record: its command hardcodes the master checkout path where `e2e/menu.spec.ts` does not exist until this commit lands, so that literal path only passes post-landing or in the worktree (which is where the recorded exit 0 came from). Nothing to fix. For the Campaign/Tutorial tasks, enable their menu buttons by passing `onCampaign`/`onTutorial` to `MainMenu` and add matching `AppView` values plus screens.
 
+## 2026-08-10 — i_5b0e08f9f0ea — Add an always-available in-game Help entry with two clearly separated sections, Controls (unit selection, click-to-move, tackle, pass/spell targeting, End Action/End Turn, Save/Load, Rematch) and How-to-play (objective, turn structure, stats, terrain/weather, spells, XP/levels, win condition), reusing GAME_RULES as the single source of truth rather than duplicating rule text; add e2e/help.spec.ts asserting both sections appear.
+
+Add always-available in-game Help with separate Controls and How-to-play sections
+
+Adds `components/HelpModal.tsx`, a two-section modal opened from a renamed
+in-game "❓ Help" button (previously "📖 Game Rules") in `App.tsx`. The
+Controls tab lists UI actions (unit selection, click-to-move, tackle,
+pass/spell targeting, End Action/End Turn, Save/Load, Rematch, Quit to
+Menu); the How-to-play tab renders GAME_RULES verbatim so the help text and
+the rules block fed to the AI engines cannot drift apart.
+
+`e2e/help.spec.ts` drives Quick Play into a running match with no API keys,
+opens Help, and asserts both sections render their own content, then closes
+cleanly back to the match.
+
+RuleBookModal.tsx is now unused but left in place (out of scope to remove);
+README and CLAUDE.md already documented Help, so no doc changes. Full
+Playwright suite (6 specs) and Vitest suite (101 tests) green; both verify
+commands pass.
+
