@@ -38,10 +38,32 @@ The AI angle is a dual-engine setup: one LLM provides live match commentary and 
     npm run dev
     ```
 
+## Game Modes
+
+The game opens on a fantasy-styled **main menu** with four entries. You can return to the menu from inside a match at any time via **Quit to Menu** (and from the game-over screen), all without a page reload, and doing so never clobbers a running match's saved state.
+
+- **Quick Play**: a one-off exhibition match. Pick the pitch and the sky on the start screen, then play a standard 5v5 game to 21 points or 16 turns.
+- **Campaign**: a first-playable league season (see below).
+- **Tutorial**: a short, skippable guided walkthrough (see below). Runs on Grass / Clear and needs no API keys.
+- **Settings**: the dual-engine provider/model configuration (also reachable via the gear icon in-game).
+
+### Campaign (league season)
+
+Campaign runs a **4-team double round-robin**: every team meets every other team twice, once at each team's home, for 12 fixtures in all. A standings table tracks played / won / drawn / lost and league points on the **3-1-0** (win-draw-loss) system, sorted by points, then goal difference, then points scored.
+
+-   **Your fixtures** are played as normal matches.
+-   **AI-vs-AI fixtures** resolve instantly through a pure, non-LLM simulator that derives a deterministic score from each team's overall quality: no keys, no network, and a fixed season is fully reproducible.
+-   When every fixture is played, a **season-complete** screen crowns the champion and offers a **new season**: rosters carry over (via the persistent roster system), and the standings reset.
+-   The campaign persists under its own **versioned localStorage** slot, separate from the single-match save and the roster slots. It resumes from the Campaign menu entry, survives a reload mid-season, and degrades gracefully (to "no usable campaign") on corrupt or missing data rather than loading a half-broken season.
+
+### Tutorial
+
+The Tutorial teaches by doing: a short sequence of anchored **coachmarks**, each with a plain-language instruction and a real in-game action to perform (select a unit, move it, pick up the ball, score, end the turn), advanced with **Next / Skip** controls. It is **skippable at any time** and returns cleanly to the menu without touching your saves or rosters. It always runs on Grass / Clear and needs no API keys, so it doubles as the keys-free first-run experience.
+
 ## 📖 Gameplay Manual
 
 ### The Basics
-Spellbound Gridiron is a turn-based tactical sports game played on a 12x18 grid. The objective is to score touchdowns by moving the ball into the opponent's endzone.
+Spellbound Gridiron is a turn-based tactical sports game played on a 12x18 grid. The objective is to score touchdowns by moving the ball into the opponent's endzone. Whichever mode you pick, the in-match rules below are identical.
 
 To move, select a unit and click any highlighted tile: the unit walks the shortest path there, one Move point per square, resolving terrain (slips, hazards, slides), ball pickups, and touchdowns along the way.
 
@@ -89,6 +111,9 @@ Teams persist between matches. When a match ends, both rosters (every player's X
 -   **New Game**: starts over with brand-new teams (progression reset).
 
 ## Features
+
+### 📓 In-game Help
+An always-available **Help** entry splits into two sections: **Controls** (unit selection, click-to-move, tackle, pass/spell targeting, End Action / End Turn, Save/Load, Rematch) and **How to play** (objective, turn structure, stats, terrain/weather, spells, XP/levels, win condition). It reuses the same `GAME_RULES` block the AI engines are fed, so the rules never drift between what the game tells you and what it tells the AI.
 
 ### 🤖 AI Assistant (chatbot)
 Click the robot icon to open the **Ai Assistant** terminal. This assistant provides in-game help, rule clarifications, and tactical advice.

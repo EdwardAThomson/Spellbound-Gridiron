@@ -191,3 +191,32 @@ Verify green: `vitest run services/tutorial.test.ts` passed (exit 0, 7/7).
 ---
 Note for next step: the tutorial UI layer will import `TUTORIAL_STEPS` and anchor coachmarks to the named elements (`board`, `player-token`, `reachable-tile`, `ball`, `endzone`, `end-turn-button`, `help-button`); those will need matching `data-tutorial` attributes when built. Only the scoped tutorial test was run, not the full `npm run check`; the wider suite should still be green since this item adds isolated pure-data files with no imports into existing modules.
 
+## 2026-08-10 — i_f61ea6a771dd — Document the new Main-menu, Campaign, and Tutorial modes in README.md and CLAUDE.md, and sync any mode/control wording into GAME_RULES (utils/contextSerializer.ts) so gameplay docs do not drift.
+
+Docs-only change documenting the new modes. Verify passed (exit 0).
+
+Commit message:
+
+```
+Document Main-menu, Campaign, and Tutorial modes in README, CLAUDE.md, and GAME_RULES
+
+Add mode documentation across the three scoped doc files so gameplay
+docs do not drift from the new menu/campaign/tutorial features.
+
+- README.md: new "Game Modes" section covering the main menu and its
+  four entries (Quick Play / Campaign / Tutorial / Settings), plus
+  Campaign-league and Tutorial subsections, and an "In-game Help"
+  feature entry.
+- CLAUDE.md: new "Game modes & screens" subsection mapping each mode to
+  its services/*.ts logic and test, with a cross-file consistency
+  reminder.
+- utils/contextSerializer.ts: one "Modes" line added to GAME_RULES so
+  the rules block sent to the AI reflects the mode framing.
+
+No em dashes in the additions; the surrounding legacy prose is left
+untouched. Docs-only, so no npm run check run here (the described UI
+does not exist yet).
+```
+
+Next step: the UI items (menu, Help, Tutorial UI, Campaign hub) build the screens these docs describe.
+

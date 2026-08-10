@@ -53,6 +53,18 @@ Both engines share the same `serializeGameState` context block (rules + state + 
 
 All gameplay state lives in a single `useState<GameState>` in `App.tsx` (~735 lines). There is no reducer, store, or context for game state — only `ApiKeysContext` for keys. New gameplay features generally extend the `GameState` type (`types.ts`) and `App.tsx` handlers. Pure helpers (dice, tackle/pass resolution, distance, player creation) belong in `services/gameUtils.ts`.
 
+### Game modes & screens
+
+The app is organized around a fantasy-styled main menu (Quick Play / Campaign / Tutorial / Settings) that replaces the bare start overlay; the menu is reachable again from inside a match (Quit to Menu) and from the game-over screen without a page reload, and returning to it must not corrupt a running match's save. All modes share the same in-match rules; only the framing around a match differs.
+
+Follow the harness split for each mode: the pure, deterministic, rng-injected logic lives in `services/` and is unit-tested there, and the DOM/React layer in `App.tsx`/`components/` only wires it up.
+
+- **Campaign**: `services/campaign.ts` holds the whole league model: a 4-team double round-robin fixture generator (`generateFixtures`, 12 fixtures), `computeStandings` (3-1-0), a non-LLM rng-injected match simulator (`simulateMatch`, deterministic from team quality), season helpers (`createCampaign`, `recordResult`, `isSeasonComplete`), and a versioned localStorage envelope (`CAMPAIGN_VERSION`/`CAMPAIGN_KEY`, `save`/`loadCampaign`) that degrades on corrupt or missing data. Covered by `services/campaign.test.ts`. The campaign hub UI (standings table, next fixture, play/simulate, season-complete/new-season) consumes this; player fixtures play as normal matches, AI-vs-AI fixtures resolve instantly via `simulateMatch`.
+- **Tutorial**: `services/tutorial.ts` is the data-driven step list (`TUTORIAL_STEPS`): ordered, plain-data coachmark steps, each with an `anchor`, `text`, and a discriminated-union `completion` condition (`isTutorialStep` guards well-formedness). Covered by `services/tutorial.test.ts`. The tutorial UI anchors a coachmark per step, waits for the real action where practical, is skippable, runs on Grass/Clear with no API keys, and returns to the menu without touching saves or rosters.
+- **Help**: an always-available in-game entry with two sections, Controls and How-to-play, that reuses `GAME_RULES` (`utils/contextSerializer.ts`) as the single source of truth rather than duplicating rule text.
+
+When you touch any mode/control wording, keep it consistent across `GAME_RULES`, the Help/`RuleBookModal` UI, `README.md`, and this file.
+
 ### API keys & environment
 
 - `ApiKeysContext` (`context/ApiKeysContext.tsx`) seeds from `import.meta.env.VITE_{OPENAI,GEMINI,GOOGLE,ANTHROPIC}_API_KEY` and overrides from `localStorage['spellbound_api_keys']`. Users edit keys via Settings.
