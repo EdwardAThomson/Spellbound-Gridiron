@@ -5,7 +5,8 @@ import {
 } from './types';
 import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
-import { generateCommentary, generateTeamName } from './services/gameAiService';
+import { generateTeamName } from './services/gameAiService';
+import { commentaryFor } from './services/commentary';
 import BoardTile from './components/BoardTile';
 import PlayerToken from './components/PlayerToken';
 import GameLog from './components/GameLog';
@@ -485,12 +486,10 @@ export default function App() {
         return getAllPlayers().find(p => p.id === gameState.selectedPlayerId);
     }, [gameState.selectedPlayerId, getAllPlayers]);
 
-    // Commentary is batched to one LLM request per action. A single action
-    // (tackle, pass, spell) emits several log lines; firing a request per line
-    // both races the `commentary`/`isAiThinking` slots and sends the LLM stale
-    // pre-action state. Instead `addLog` only appends, and the log lines from an
-    // action are collected and flushed once, on the next tick, from the fresh
-    // post-action state (read via `gameStateRef`, updated after each commit).
+    // Commentary is batched to one line per action. A single action (tackle,
+    // pass, spell) emits several log lines; `addLog` only appends, and the
+    // lines are collected and flushed once, on the next tick, into a single
+    // deterministic announcer line (services/commentary.ts). No LLM involved.
     const gameStateRef = useRef(gameState);
     useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
@@ -559,20 +558,14 @@ export default function App() {
         commentaryTimerRef.current = setTimeout(flushCommentary, 50);
     };
 
-    const flushCommentary = async () => {
+    const flushCommentary = () => {
         const lines = pendingLogsRef.current;
         pendingLogsRef.current = [];
         commentaryTimerRef.current = null;
         if (lines.length === 0) return;
 
-        const action = lines.join(' ');
-        setIsAiThinking(true);
-        try {
-            const comment = await generateCommentary(action, gameStateRef.current, gameProvider, apiKeys, gameModel);
-            setGameState(prev => ({ ...prev, commentary: comment }));
-        } finally {
-            setIsAiThinking(false);
-        }
+        const comment = commentaryFor(lines, Math.random);
+        setGameState(prev => ({ ...prev, commentary: comment }));
     };
 
     // --- Interaction Handlers ---
@@ -1597,7 +1590,7 @@ export default function App() {
                 {/* RIGHT PANEL: LOGS & CHAT */}
                 <div className="w-full md:w-72 h-64 md:h-auto md:max-h-screen md:sticky md:top-0 border-l border-white/10 bg-stone-950 z-10 flex flex-col">
                     <div className="flex-1 min-h-0">
-                        <GameLog logs={gameState.gameLog} commentary={gameState.commentary} isThinking={isAiThinking} />
+                        <GameLog logs={gameState.gameLog} commentary={gameState.commentary} />
                     </div>
                     {/* The AI coach launcher anchors the bottom of the log column,
                         lifting the log clear of the screen edge and keeping the

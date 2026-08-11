@@ -3,7 +3,7 @@
 
 A fantasy football strategy game powered by AI. Broadly inspired by Blood Bowl: two teams of five (Linemen, Blitzers, Catchers, a Quarterback, and a spell-slinging Wizard) battle across a 12x18 grid, tackling, passing, and casting spells to carry the ball into the opposing endzone.
 
-The AI angle is a dual-engine setup: one LLM provides live match commentary and team names, while a second powers an in-game assistant chatbot (Coach "Iron-Gut" Ironfist) for rules help and tactical advice. Both engines can run on cloud APIs (OpenAI, Gemini, Claude) or on local CLI tools via a small backend server.
+The AI angle is a dual-engine setup: one LLM invents team names, while a second powers an in-game assistant chatbot (Coach "Iron-Gut" Ironfist) for rules help and tactical advice. Both engines can run on cloud APIs (OpenAI, Gemini, Claude) or on local CLI tools via a small backend server. Match commentary is deterministic flavor text generated locally, and every game mechanic (dice, terrain, opponent AI, campaign simulation) is deterministic code, so the game is fully playable with no API keys at all.
 
 ![Screenshot](Screenshot_20251218.png)
 
@@ -23,7 +23,7 @@ The AI angle is a dual-engine setup: one LLM provides live match commentary and 
 
 2.  **Environment Setup:**
     - Create a `.env` file in the root directory (see `.env.example` or `.env.local`).
-    - Add your `GEMINI_API_KEY` for in-game commentary.
+    - Add your `GEMINI_API_KEY` for AI team names and the assistant chatbot (optional; the game plays fully without it).
     - (Optional) Add `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. if strictly using server-side keys (though the UI now allows client-side entry).
 
 3.  **Start the Backend (CLI Runner):**
@@ -127,7 +127,7 @@ Click the robot icon to open the **Ai Assistant** terminal. This assistant provi
 ### ⚙️ Game Configuration
 Click the **Gear Icon** to open the Settings Modal. Here you can configure the dual-engine architecture:
 
-1.  **Game Engine**: Powers automatic commentary, team names, and flavor text.
+1.  **Game Engine**: Powers AI team-name generation. (Match commentary is local and deterministic; the crystal-ball panel above the log slides open if you want to read it.)
 2.  **Assistant Engine**: Powers the interactive chat assistant.
 
 **Supported Providers:**

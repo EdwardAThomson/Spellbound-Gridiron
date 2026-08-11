@@ -82,7 +82,7 @@ export default function SettingsModal({
                         </div>
                     </div>
                     <p className="text-xs text-center text-gray-500">
-                        This AI engine powers commentary, names, and tactics.
+                        This AI engine invents team names. Match commentary is generated locally, no AI or keys needed.
                     </p>
 
                     <div className="h-px bg-white/10"></div>

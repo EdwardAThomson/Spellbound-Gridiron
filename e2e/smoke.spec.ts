@@ -22,5 +22,12 @@ test('the main menu renders and a match can begin without API keys', async ({ pa
   // board is live: the scoreboard shows the opening turn.
   await expect(startButton).toBeHidden();
   await expect(page.getByText(/turn 1/i)).toBeVisible();
+
+  // The crystal-ball commentary is collapsed by default and slides open on
+  // demand; its content is deterministic local flavor text, no keys involved.
+  const commentaryBody = page.getByTestId('commentary-body');
+  await expect(commentaryBody.getByText(/"/)).not.toBeInViewport();
+  await page.getByTestId('commentary-toggle').click();
+  await expect(commentaryBody.getByText(/"/)).toBeInViewport();
   await saveScreenshot(page, 'match-started');
 });

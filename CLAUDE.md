@@ -44,7 +44,7 @@ Any new provider needs to be added in three places: `LLMProvider` union (`utils/
 
 The UI exposes two independent provider/model pairs (set in `SettingsModal.tsx`, held as state in `App.tsx`):
 
-- **Game engine** (`gameProvider` / `gameModel`) — powers `generateCommentary` and `generateTeamName` in `services/gameAiService.ts`.
+- **Game engine** (`gameProvider` / `gameModel`) — powers `generateTeamName` in `services/gameAiService.ts` (its only remaining LLM job). Match commentary is deterministic: `services/commentary.ts` classifies an action's batched log lines and draws an announcer line from a pool (rng-injected, no LLM).
 - **Assistant engine** (`chatProvider` / `chatModel`) — powers the in-game chatbot in `components/AiAssistantPanel.tsx`. This is the only consumer of the CLI path.
 
 Both engines share the same `serializeGameState` context block (rules + state + recent log) and the same `PROMPT_SNIPPET` persona (`constants/ai_persona.ts` — Coach "Iron-Gut" Ironfist).

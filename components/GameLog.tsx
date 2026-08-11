@@ -1,13 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface GameLogProps {
   logs: string[];
   commentary: string;
-  isThinking: boolean;
 }
 
-const GameLog: React.FC<GameLogProps> = ({ logs, commentary, isThinking }) => {
+const GameLog: React.FC<GameLogProps> = ({ logs, commentary }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // The crystal ball is flavor, not information, so it starts closed and
+  // slides open on demand; the header stays visible as the toggle.
+  const [showCommentary, setShowCommentary] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -17,15 +19,27 @@ const GameLog: React.FC<GameLogProps> = ({ logs, commentary, isThinking }) => {
 
   return (
     <div className="flex flex-col h-full bg-black/40 rounded-lg overflow-hidden border border-white/10">
-      {/* Commentary Box */}
-      <div className="p-4 bg-gradient-to-r from-purple-900/80 to-indigo-900/80 border-b border-white/10 min-h-[100px]">
-        <div className="flex items-center gap-2 mb-1">
-             <span className="text-xl">🔮</span>
-             <h3 className="text-xs font-bold uppercase tracking-widest text-purple-300">Crystal Ball Commentary</h3>
+      {/* Commentary Box (collapsible) */}
+      <div className="bg-gradient-to-r from-purple-900/80 to-indigo-900/80 border-b border-white/10">
+        <button
+          data-testid="commentary-toggle"
+          onClick={() => setShowCommentary(v => !v)}
+          className="w-full p-3 flex items-center justify-between gap-2 text-left hover:bg-white/5 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-xl">🔮</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-purple-300">Crystal Ball Commentary</span>
+          </span>
+          <span className={`text-purple-300 text-xs transition-transform ${showCommentary ? 'rotate-180' : ''}`}>▼</span>
+        </button>
+        <div
+          data-testid="commentary-body"
+          className={`overflow-hidden transition-all duration-300 ${showCommentary ? 'max-h-40' : 'max-h-0'}`}
+        >
+          <p className="px-4 pb-3 text-sm italic text-white/90 font-serif leading-relaxed">
+            "{commentary}"
+          </p>
         </div>
-        <p className={`text-sm italic text-white/90 font-serif leading-relaxed ${isThinking ? 'animate-pulse' : ''}`}>
-          "{commentary}"
-        </p>
       </div>
 
       {/* Game Log List */}
