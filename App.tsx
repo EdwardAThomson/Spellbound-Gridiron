@@ -105,6 +105,7 @@ export default function App() {
     const [targetingAction, setTargetingAction] = useState<TargetAction | null>(null);
     const [activeSpellKey, setActiveSpellKey] = useState<string | null>(null);
     const [showHelp, setShowHelp] = useState(false);
+    const [showAssistant, setShowAssistant] = useState(false);
     const [showSpellMenu, setShowSpellMenu] = useState(false);
 
     // Guided tutorial state. When `tutorialActive`, the coachmark overlay rides
@@ -1595,11 +1596,23 @@ export default function App() {
 
                 {/* RIGHT PANEL: LOGS & CHAT */}
                 <div className="w-full md:w-72 h-64 md:h-auto md:max-h-screen md:sticky md:top-0 border-l border-white/10 bg-stone-950 z-10 flex flex-col">
-                    <GameLog logs={gameState.gameLog} commentary={gameState.commentary} isThinking={isAiThinking} />
+                    <div className="flex-1 min-h-0">
+                        <GameLog logs={gameState.gameLog} commentary={gameState.commentary} isThinking={isAiThinking} />
+                    </div>
+                    {/* The AI coach launcher anchors the bottom of the log column,
+                        lifting the log clear of the screen edge and keeping the
+                        column visually balanced. */}
+                    <button
+                        onClick={() => setShowAssistant(true)}
+                        className="m-2 py-1.5 bg-purple-900/50 hover:bg-purple-800/50 border border-purple-500/30 rounded text-purple-200 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                        title="AI Assistant"
+                    >
+                        <span>🤖</span> AI Coach
+                    </button>
                 </div>
 
                 {/* CLI RUNNER PANEL */}
-                <AiAssistantPanel gameState={gameState} backend={chatProvider} model={chatModel} />
+                <AiAssistantPanel gameState={gameState} backend={chatProvider} model={chatModel} isOpen={showAssistant} onClose={() => setShowAssistant(false)} />
                 <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
 
                 <SettingsModal

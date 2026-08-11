@@ -10,10 +10,12 @@ interface AiAssistantPanelProps {
     gameState: GameState;
     backend: LLMProvider;
     model: string;
+    // Controlled by App: the launcher lives at the bottom of the log panel.
+    isOpen: boolean;
+    onClose: () => void;
 }
 
-export default function AiAssistantPanel({ gameState, backend, model }: AiAssistantPanelProps) {
-    const [isOpen, setIsOpen] = useState(false);
+export default function AiAssistantPanel({ gameState, backend, model, isOpen, onClose }: AiAssistantPanelProps) {
     const [prompt, setPrompt] = useState('');
     const [status, setStatus] = useState<TaskStatus | 'idle'>('idle');
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -85,17 +87,7 @@ export default function AiAssistantPanel({ gameState, backend, model }: AiAssist
         }
     };
 
-    if (!isOpen) {
-        return (
-            <button
-                onClick={() => setIsOpen(true)}
-                className="fixed bottom-4 right-4 bg-purple-900/80 hover:bg-purple-800 text-white p-3 rounded-full shadow-lg border border-purple-500/50 z-50 transition-all hover:scale-110"
-                title="AI Assistant"
-            >
-                <span className="text-xl">🤖</span>
-            </button>
-        );
-    }
+    if (!isOpen) return null;
 
     return (
         <div className="fixed bottom-4 right-4 w-96 md:w-[600px] h-[500px] bg-stone-950 border border-purple-500/30 rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden font-mono text-xs">
@@ -112,7 +104,7 @@ export default function AiAssistantPanel({ gameState, backend, model }: AiAssist
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+                    <button onClick={() => onClose()} className="text-gray-400 hover:text-white">✕</button>
                 </div>
             </div>
 
