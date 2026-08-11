@@ -152,6 +152,52 @@ describe('planOpponentTurn: the loose ball', () => {
   });
 });
 
+describe('planOpponentTurn: chaser selection (regression)', () => {
+  it('picks the unit that can actually REACH the ball, not the closest by distance', () => {
+    // The QB (move 6) is 7 tiles from the ball and cannot reach it; the Catcher
+    // (move 8) is 9 away by Manhattan but CAN land on it. The Catcher chases.
+    const away = mkTeam([
+      mkPlayer({ id: 'qb', role: PlayerRole.QUARTERBACK, position: { x: 6, y: 16 } }),
+      mkPlayer({ id: 'catcher', role: PlayerRole.CATCHER, position: { x: 8, y: 16 } }),
+    ]);
+    const ball: Position = { x: 6, y: 9 };
+    const plan = planOpponentTurn(mkState({ awayTeam: away, ballPosition: ball }), rng(), TeamSide.AWAY);
+    const pickup = plan.find(
+      (a) => a.type === 'move' && (a as any).to.x === ball.x && (a as any).to.y === ball.y
+    );
+    expect(pickup).toBeDefined();
+    expect((pickup as any).playerId).toBe('catcher');
+    expectTerminates(plan);
+  });
+});
+
+describe('planOpponentTurn: closing with a Move to spare (regression)', () => {
+  it('moves adjacent to the carrier with a step spare, then tackles the same turn', () => {
+    // The carrier is 4 steps away from a Lineman with Move 4: burning all four
+    // Move points to get adjacent would forfeit the tackle, so the planner must
+    // stop adjacent within 3 and still throw the hit.
+    const carrier = mkPlayer({
+      id: 'h-carrier', team: TeamSide.HOME, role: PlayerRole.CATCHER,
+      position: { x: 5, y: 12 }, hasBall: true,
+    });
+    const away = mkTeam([mkPlayer({ id: 'a-line', position: { x: 5, y: 16 } })]);
+    const plan = planOpponentTurn(
+      mkState({ homeTeam: mkTeam([carrier]), awayTeam: away, ballPosition: null }),
+      rng(),
+      TeamSide.AWAY
+    );
+    const tackle = plan.find((a) => a.type === 'tackle');
+    expect(tackle).toBeDefined();
+    expect((tackle as any).targetId).toBe('h-carrier');
+    const move = plan.find((a) => a.type === 'move' && (a as any).playerId === 'a-line');
+    // Landing tile is adjacent to the carrier and at most 3 steps out.
+    expect(move).toBeDefined();
+    const to = (move as any).to;
+    expect(Math.max(Math.abs(to.x - 5), Math.abs(to.y - 12))).toBe(1);
+    expectTerminates(plan);
+  });
+});
+
 describe('planOpponentTurn: carrying the ball', () => {
   it('drives the carrier toward the attacking endzone, never its own endzone', () => {
     // AWAY attacks the top (y = 0); its own endzone is the bottom (y = 17).

@@ -409,12 +409,22 @@ export const planOpponentTurn = (
       return out;
     }
 
-    // Otherwise close the distance, then hit if we end up adjacent with a step
-    // to spare.
+    // Otherwise close the distance. A tackle costs a Move point, so first look
+    // for a tile adjacent to the goal reachable with a step to SPARE (that is,
+    // within movesRemaining - 1); only when no such tile exists fall back to
+    // plain closing, which may spend everything and forfeit the hit.
     if (p.movesRemaining > 0) {
       const goal = carrier ?? target;
-      const tiles = reachableTiles(p.position, p.movesRemaining, blockedFor(p.id));
-      const step = chooseTile(tiles, (t) => -manhattanDistance(t, goal.position));
+      const striking = p.movesRemaining > 1
+        ? reachableTiles(p.position, p.movesRemaining - 1, blockedFor(p.id))
+            .filter((t) => isAdjacent(t, goal.position))
+        : [];
+      const step = striking.length > 0
+        ? chooseTile(striking, (t) => -manhattanDistance(t, goal.position))
+        : chooseTile(
+            reachableTiles(p.position, p.movesRemaining, blockedFor(p.id)),
+            (t) => -manhattanDistance(t, goal.position)
+          );
       if (step) {
         const mv = moveTo(p, step);
         if (mv) out.push(mv);
@@ -441,14 +451,30 @@ export const planOpponentTurn = (
 
   let chaserId: string | null = null;
   if (ball.pos) {
-    const chasers = mine
-      .filter((p) => p.movesRemaining > 0)
-      .sort(
+    // The chaser is the unit that can actually REACH the ball this turn (the
+    // shortest such path wins), not merely the closest as the crow flies: a
+    // fast Catcher nine tiles out beats a slow Quarterback seven tiles out.
+    const candidates = mine.filter((p) => p.movesRemaining > 0);
+    const pathLen = (p: WorkPlayer): number => {
+      const path = findPath(p.position, ball.pos!, p.movesRemaining, blockedFor(p.id));
+      return path ? path.length : Infinity;
+    };
+    const reachers = candidates
+      .map((p) => ({ p, len: pathLen(p) }))
+      .filter((c) => c.len !== Infinity)
+      .sort((a, b) => a.len - b.len || a.p.id.localeCompare(b.p.id));
+    if (reachers.length > 0) {
+      chaserId = reachers[0].p.id;
+    } else {
+      // Nobody reaches it this turn: send whoever is closest to shorten the
+      // chase next turn.
+      const chasers = candidates.sort(
         (a, b) =>
           manhattanDistance(a.position, ball.pos!) - manhattanDistance(b.position, ball.pos!) ||
           a.id.localeCompare(b.id)
       );
-    chaserId = chasers[0]?.id ?? null;
+      chaserId = chasers[0]?.id ?? null;
+    }
   }
 
   const orderKey = (p: WorkPlayer): number => {
