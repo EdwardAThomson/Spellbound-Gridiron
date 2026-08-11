@@ -12,7 +12,7 @@ interface HelpModalProps {
 // block the AI engines are fed can never drift apart.
 const CONTROLS: { label: string; text: string }[] = [
     { label: 'Select a unit', text: "Click one of your units to select it. Its reachable tiles light up and its actions appear in the side panel." },
-    { label: 'Click to move', text: 'Click any highlighted tile and the unit walks the shortest path there, one square at a time.' },
+    { label: 'Click to move', text: 'Click any highlighted tile and the unit walks the shortest path there automatically, spending one Move point per square.' },
     { label: 'Tackle', text: 'Move your selected unit into an adjacent opponent to start a Strength contest.' },
     { label: 'Pass / spell targeting', text: 'Choose Pass or a spell, then click the target tile. Cancel Action aborts targeting without spending the turn.' },
     { label: 'End Action', text: "Finish the selected unit's turn without moving it any further." },

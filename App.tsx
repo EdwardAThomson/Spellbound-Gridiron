@@ -1243,13 +1243,71 @@ export default function App() {
                         isHazard={tileIsHazard}
                         isMeteorTarget={tileIsMeteor}
                         onClick={() => handleTileClick(x, y)}
-                    >
-                        {player && <PlayerToken player={player} onClick={(e) => { e.stopPropagation(); handleTileClick(x, y); }} />}
-                    </BoardTile>
+                    />
                 );
             }
         }
         return tiles;
+    };
+
+    // --- Token layer ---
+    // Tokens live in an absolutely positioned overlay (not inside the grid
+    // cells) so a position change glides between tiles instead of teleporting.
+    // The layer is pointer-events-none: clicks fall through to the tile
+    // underneath, which runs the same handleTileClick the token used to.
+
+    const gridRef = useRef<HTMLDivElement | null>(null);
+    const [tileMetrics, setTileMetrics] = useState({ tileW: 0, tileH: 0 });
+    const GRID_PAD = 4;  // p-1
+    const GRID_GAP = 1;  // gap-[1px]
+
+    useEffect(() => {
+        const el = gridRef.current;
+        if (!el) return;
+        const measure = () => {
+            setTileMetrics({
+                tileW: (el.clientWidth - 2 * GRID_PAD - (BOARD_WIDTH - 1) * GRID_GAP) / BOARD_WIDTH,
+                tileH: (el.clientHeight - 2 * GRID_PAD - (BOARD_HEIGHT - 1) * GRID_GAP) / BOARD_HEIGHT,
+            });
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [view]);
+
+    // Last rendered position per token, to scale the glide duration by how far
+    // the token actually travelled (a 6-tile sprint takes longer than a step).
+    const tokenPrevPosRef = useRef(new Map<string, Position>());
+
+    const renderTokenLayer = () => {
+        if (tileMetrics.tileW <= 0) return null;
+        return (
+            <div className="absolute inset-0 pointer-events-none">
+                {getAllPlayers().map(player => {
+                    const { x, y } = player.position;
+                    const prev = tokenPrevPosRef.current.get(player.id);
+                    const travelled = prev ? Math.max(Math.abs(prev.x - x), Math.abs(prev.y - y)) : 0;
+                    tokenPrevPosRef.current.set(player.id, { x, y });
+                    const durationMs = travelled === 0 ? 0 : Math.min(150 + 120 * travelled, 650);
+                    return (
+                        <div
+                            key={player.id}
+                            className="absolute flex items-center justify-center transition-[left,top] ease-out"
+                            style={{
+                                left: GRID_PAD + x * (tileMetrics.tileW + GRID_GAP),
+                                top: GRID_PAD + y * (tileMetrics.tileH + GRID_GAP),
+                                width: tileMetrics.tileW,
+                                height: tileMetrics.tileH,
+                                transitionDuration: `${durationMs}ms`,
+                            }}
+                        >
+                            <PlayerToken player={player} onClick={() => { }} />
+                        </div>
+                    );
+                })}
+            </div>
+        );
     };
 
     const selectedPlayer = getSelectedPlayer();
@@ -1507,14 +1565,16 @@ export default function App() {
 
                         {/* Grid Container */}
                         <div
+                            ref={gridRef}
                             data-tutorial="board"
-                            className="grid gap-[1px] bg-white/5 p-1"
+                            className="relative grid gap-[1px] bg-white/5 p-1"
                             style={{
                                 gridTemplateColumns: `repeat(${BOARD_WIDTH}, minmax(24px, 40px))`,
                                 gridTemplateRows: `repeat(${BOARD_HEIGHT}, minmax(24px, 40px))`
                             }}
                         >
                             {renderBoard()}
+                            {renderTokenLayer()}
                         </div>
                     </div>
                 </div>

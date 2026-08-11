@@ -30,7 +30,7 @@ test('the tutorial runs from the menu through the core loop and back', async ({ 
   // Step 2 (select a unit): clicking a real HOME token advances by doing.
   await expect(coach.getByText(/click one of your units/i)).toBeVisible();
   await page.getByTestId('tile-8-1').click(); // HOME Catcher starts at (8, 1)
-  await expect(coach.getByText(/click a highlighted tile to move/i)).toBeVisible();
+  await expect(coach.getByText(/click any highlighted tile to move/i)).toBeVisible();
 
   // Step 3 (move): clicking a reachable tile advances by doing.
   await page.getByTestId('tile-8-4').click();

@@ -83,7 +83,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     id: 'move-player',
     order: 3,
     anchor: 'reachable-tile',
-    text: 'Click a highlighted tile to move there. Units walk one square at a time in any of the 8 directions, spending one Move point per square.',
+    text: 'Click any highlighted tile to move there. Your unit walks the shortest path automatically, spending one Move point per square, moving in any of the 8 directions.',
     completion: { kind: 'move-player' },
   },
   {
