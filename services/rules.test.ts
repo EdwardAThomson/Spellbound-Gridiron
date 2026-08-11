@@ -18,7 +18,8 @@ import {
   resolveTerrainStep,
   chooseMeteorTarget,
   advanceMeteor,
-  awardXp,
+  bankXp,
+  resolveLevelUps,
   applyLevelBump,
   levelForXp,
   LEVEL_THRESHOLDS,
@@ -362,21 +363,27 @@ describe('applyLevelBump', () => {
   });
 });
 
-describe('awardXp', () => {
-  it('banks XP without a level-up below the next threshold', () => {
-    const r = awardXp(mkPlayer(), XP_AWARDS.TACKLE, seq([0]));
-    expect(r.player.xp).toBe(XP_AWARDS.TACKLE);
-    expect(r.player.level).toBe(1);
-    expect(r.leveledUp).toBe(false);
-    expect(r.bumped).toEqual([]);
-    expect(r.log).toBeNull();
+describe('bankXp / resolveLevelUps', () => {
+  it('bankXp accrues XP without touching level or stats mid-match', () => {
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    const r = bankXp(mkPlayer(), LEVEL_THRESHOLDS[1]);
+    expect(r.xp).toBe(LEVEL_THRESHOLDS[1]);
+    expect(r.level).toBe(1);
+    expect(r.stats).toEqual(mkPlayer().stats);
+    expect(base.strength).toBe(mkPlayer().stats.strength);
   });
 
-  it('levels up and applies one role-capped bump per level crossed', () => {
+  it('bankXp treats a zero or negative award as a no-op', () => {
+    const start = mkPlayer({ xp: 3 });
+    expect(bankXp(start, 0).xp).toBe(3);
+    expect(bankXp(start, -10).xp).toBe(3);
+  });
+
+  it('resolveLevelUps converts banked XP into a level-up with one bump per level', () => {
     const base = ROLE_STATS[PlayerRole.LINEMAN];
     // rng always 0 => always the first eligible growth stat (strength) until capped.
-    const r = awardXp(mkPlayer(), LEVEL_THRESHOLDS[1], seq([0]));
-    expect(r.player.xp).toBe(LEVEL_THRESHOLDS[1]);
+    const banked = mkPlayer({ xp: LEVEL_THRESHOLDS[1] });
+    const r = resolveLevelUps(banked, seq([0]));
     expect(r.player.level).toBe(2);
     expect(r.leveledUp).toBe(true);
     expect(r.bumped).toEqual(['strength']);
@@ -384,24 +391,26 @@ describe('awardXp', () => {
     expect(r.log).toContain('Level 2');
   });
 
-  it('never bumps a stat past its role cap even at max level', () => {
-    const base = ROLE_STATS[PlayerRole.LINEMAN];
-    // Enough XP to hit the top level in one award; rng 0 funnels into strength,
-    // which caps at +MAX_STAT_BUMP and spills the rest into armor.
-    const r = awardXp(mkPlayer(), LEVEL_THRESHOLDS[MAX_LEVEL - 1], seq([0]));
-    expect(r.player.level).toBe(MAX_LEVEL);
-    expect(r.player.stats.strength).toBe(base.strength + MAX_STAT_BUMP);
-    expect(r.player.stats.strength - base.strength).toBeLessThanOrEqual(MAX_STAT_BUMP);
-    expect(r.player.stats.armor).toBeGreaterThan(base.armor);
+  it('resolveLevelUps is a no-op below the next threshold and never levels down', () => {
+    const r = resolveLevelUps(mkPlayer({ xp: XP_AWARDS.TACKLE }), seq([0]));
+    expect(r.player.level).toBe(1);
+    expect(r.leveledUp).toBe(false);
+    expect(r.bumped).toEqual([]);
+    expect(r.log).toBeNull();
+    // A stored level above the XP table (e.g. from an older roster) is kept.
+    const kept = resolveLevelUps(mkPlayer({ xp: 0, level: 3 }), seq([0]));
+    expect(kept.player.level).toBe(3);
+    expect(kept.leveledUp).toBe(false);
   });
 
-  it('treats a zero or negative award as a no-op that never levels down', () => {
-    const start = mkPlayer({ xp: 3, level: 1 });
-    expect(awardXp(start, 0, seq([0])).player.xp).toBe(3);
-    const neg = awardXp(start, -10, seq([0]));
-    expect(neg.player.xp).toBe(3);
-    expect(neg.player.level).toBe(1);
-    expect(neg.leveledUp).toBe(false);
+  it('never bumps a stat past its role cap even resolving to max level', () => {
+    const base = ROLE_STATS[PlayerRole.LINEMAN];
+    // Enough banked XP to hit the top level in one resolution; rng 0 funnels
+    // into strength, which caps at +MAX_STAT_BUMP and spills into armor.
+    const r = resolveLevelUps(mkPlayer({ xp: LEVEL_THRESHOLDS[MAX_LEVEL - 1] }), seq([0]));
+    expect(r.player.level).toBe(MAX_LEVEL);
+    expect(r.player.stats.strength).toBe(base.strength + MAX_STAT_BUMP);
+    expect(r.player.stats.armor).toBeGreaterThan(base.armor);
   });
 
   it('respects the documented award ordering (touchdown is worth the most)', () => {

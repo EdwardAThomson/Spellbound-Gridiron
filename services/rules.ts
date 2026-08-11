@@ -432,11 +432,12 @@ export interface MeteorResolution {
 
 // --- XP & progression ------------------------------------------------------
 //
-// Players earn XP from the plays they make and level up into small, role-capped
-// stat bumps. Everything here is pure and rng-injected: `awardXp` folds an XP
-// gain into a player, applying one stat bump per level crossed, so the same seed
-// always grows a player the same way. `gameUtils.ts` binds the real rng and
-// `App` calls it after a successful tackle/pass/spell/touchdown.
+// Players bank XP from the plays they make during a match (`bankXp`, called by
+// `App` after a successful tackle/pass/spell/touchdown); levels and stats never
+// change mid-game. At the final whistle `resolveLevelUps` converts the banked
+// XP into level-ups, one role-capped stat bump per level crossed, league-style.
+// Everything here is pure and rng-injected, so the same seed always grows a
+// player the same way. `gameUtils.ts` binds the real rng.
 
 /** XP granted for each kind of play. Documented here and in GAME_RULES. */
 export const XP_AWARDS = {
@@ -520,15 +521,24 @@ export interface XpAward {
 }
 
 /**
- * Fold an XP gain into a player: add the XP, recompute the level, and apply one
- * role-capped stat bump for every level crossed. Pure and rng-injected (each
- * level bump consumes one rng draw). A zero or negative award only records the
- * (unchanged) XP total and never levels down.
+ * Bank an XP gain during a match: the XP total rises, but the level and stats
+ * do not change until `resolveLevelUps` runs between games. A zero or negative
+ * award is a no-op. Pure and rng-free.
  */
-export const awardXp = (player: Player, amount: number, rng: Rng): XpAward => {
-  const startLevel = levelForXp(player.xp);
-  const xp = player.xp + Math.max(0, amount);
-  const newLevel = levelForXp(xp);
+export const bankXp = (player: Player, amount: number): Player => ({
+  ...player,
+  xp: player.xp + Math.max(0, amount),
+});
+
+/**
+ * Between-games progression: convert a player's banked XP into level-ups,
+ * applying one role-capped stat bump per level crossed (each bump consumes one
+ * rng draw). Run at the final whistle, league-style, never mid-match. Levels
+ * never go down.
+ */
+export const resolveLevelUps = (player: Player, rng: Rng): XpAward => {
+  const startLevel = player.level;
+  const newLevel = Math.max(startLevel, levelForXp(player.xp));
 
   let stats = player.stats;
   const bumped: (keyof PlayerStats)[] = [];
@@ -544,7 +554,7 @@ export const awardXp = (player: Player, amount: number, rng: Rng): XpAward => {
     : null;
 
   return {
-    player: { ...player, xp, level: newLevel, stats },
+    player: { ...player, level: newLevel, stats },
     leveledUp,
     bumped,
     log,

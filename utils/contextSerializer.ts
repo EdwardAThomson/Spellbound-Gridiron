@@ -38,7 +38,7 @@ Mechanics:
   - SKL (Skill): Passing/Catching.
   - MOV (Move): Squares per turn.
   - ARM (Armor): Resistance to injury (flavor only for now).
-- Progression: Players earn XP from their plays and level up (max level 5). Each level grants one small, role-capped stat bump.
+- Progression: Players bank XP from their plays during the match; at the final whistle the banked XP resolves into level-ups (max level 5), league-style, each granting one small, role-capped stat bump. Levels and stats never change mid-match.
   - XP awards: successful tackle +2, completed pass +2, spell cast +1, touchdown +5.
   - Level thresholds (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.
 - Rosters: When a match ends, both teams' rosters (each player's XP, level and stat bumps) are saved to persistent named slots. The post-game Rematch button starts a fresh match reusing those rosters, so the same veterans return with the progression they earned; New Game instead fields fresh teams. Corrupt or missing roster data degrades gracefully to fresh teams.

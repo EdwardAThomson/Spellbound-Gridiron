@@ -103,7 +103,7 @@ Pick the pitch and the sky on the start screen; both have real mechanical effect
 
 ### Progression (XP & Levels)
 
-Players grow across a match. Every play banks XP, and enough XP levels a unit up (to a maximum of level 5), granting one small stat bump capped to that role's strengths. The selected unit's card shows its current **level** and **accrued XP**.
+Players grow between games, league-style. Every play banks XP during the match, but levels and stats never change mid-game: at the final whistle the banked XP resolves into level-ups (to a maximum of level 5), each granting one small stat bump capped to that role's strengths, announced in the log and carried into the next match by the roster system. The selected unit's card shows its current **level** and **accrued XP**.
 
 -   **XP awards**: landing a tackle **+2**, completing a pass **+2**, casting a spell **+1**, scoring a touchdown **+5**.
 -   **Level thresholds** (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.

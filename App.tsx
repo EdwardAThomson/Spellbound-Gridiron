@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, awardXp, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateCommentary, generateTeamName } from './services/gameAiService';
 import BoardTile from './components/BoardTile';
@@ -497,12 +497,35 @@ export default function App() {
     // and stat bumps) to the named roster slots, so the post-game Rematch button
     // can field the same veterans next match.
     useEffect(() => {
-        if (gameState.isGameOver) {
-            saveRosters({
-                home: extractRoster(gameStateRef.current.homeTeam),
-                away: extractRoster(gameStateRef.current.awayTeam),
-            });
-        }
+        if (!gameState.isGameOver) return;
+
+        // Between-games progression, league-style: at the final whistle the XP
+        // banked during the match resolves into level-ups and stat bumps, is
+        // announced in the log, and is what the persisted rosters carry.
+        const resolveTeam = (players: Player[]) => {
+            const results = players.map(p => resolveLevelUps(p));
+            return {
+                players: results.map(r => r.player),
+                logs: results.map(r => r.log).filter((l): l is string => l !== null),
+            };
+        };
+        const home = resolveTeam(gameStateRef.current.homeTeam.players);
+        const away = resolveTeam(gameStateRef.current.awayTeam.players);
+        const levelLogs = [...home.logs, ...away.logs];
+
+        setGameState(prev => ({
+            ...prev,
+            homeTeam: { ...prev.homeTeam, players: home.players },
+            awayTeam: { ...prev.awayTeam, players: away.players },
+            gameLog: levelLogs.length
+                ? [...prev.gameLog, 'The league office tallies the banked XP...', ...levelLogs]
+                : prev.gameLog,
+        }));
+
+        saveRosters({
+            home: extractRoster({ ...gameStateRef.current.homeTeam, players: home.players }),
+            away: extractRoster({ ...gameStateRef.current.awayTeam, players: away.players }),
+        });
     }, [gameState.isGameOver]);
 
     const pendingLogsRef = useRef<string[]>([]);
@@ -704,12 +727,9 @@ export default function App() {
             if (current.position.x !== intended.x || current.position.y !== intended.y) break;
         }
 
-        // Reward the scorer: a touchdown is the biggest XP award and can level a
-        // player up (folded into `current` before it is committed).
+        // Reward the scorer: the XP banks now; level-ups resolve between games.
         if (touchdown) {
-            const award = awardXp(current, XP_AWARDS.TOUCHDOWN);
-            current = { ...current, xp: award.player.xp, level: award.player.level, stats: award.player.stats };
-            if (award.log) addLog(award.log);
+            current = bankXp(current, XP_AWARDS.TOUCHDOWN);
         }
 
         // A touchdown can end the match (score cap reached).
@@ -757,10 +777,8 @@ export default function App() {
                 addLog("The ball pops loose!");
             }
 
-            // A landed tackle earns the attacker XP.
-            const award = awardXp(updatedAttacker, XP_AWARDS.TACKLE);
-            updatedAttacker = award.player;
-            if (award.log) addLog(award.log);
+            // A landed tackle banks XP for the attacker (level-ups wait for full time).
+            updatedAttacker = bankXp(updatedAttacker, XP_AWARDS.TACKLE);
         }
 
         updatePlayerState([updatedAttacker, updatedDefender], { ballPosition: newBallPos });
@@ -786,10 +804,8 @@ export default function App() {
                 addLog(`The ball lands at ${targetPos.x}, ${targetPos.y}.`);
             }
 
-            // A completed pass earns the thrower XP.
-            const award = awardXp(updatedThrower, XP_AWARDS.PASS);
-            updatedThrower = award.player;
-            if (award.log) addLog(award.log);
+            // A completed pass banks XP for the thrower (level-ups wait for full time).
+            updatedThrower = bankXp(updatedThrower, XP_AWARDS.PASS);
         } else {
             newBallPos = scatterBall(targetPos);
             addLog(`Inaccurate pass! Ball lands at ${newBallPos.x}, ${newBallPos.y}.`);
@@ -835,10 +851,8 @@ export default function App() {
             addLog(`${player.name} blinks across reality!`);
         }
 
-        // A successful cast earns the wizard XP.
-        const award = awardXp(updatedCaster, XP_AWARDS.SPELL);
-        updatedCaster = award.player;
-        if (award.log) addLog(award.log);
+        // A successful cast banks XP for the wizard (level-ups wait for full time).
+        updatedCaster = bankXp(updatedCaster, XP_AWARDS.SPELL);
 
         const updates = [updatedCaster];
         if (updatedTarget) updates.push(updatedTarget);
@@ -1580,7 +1594,7 @@ export default function App() {
                 </div>
 
                 {/* RIGHT PANEL: LOGS & CHAT */}
-                <div className="w-full md:w-72 h-64 md:h-auto border-l border-white/10 bg-stone-950 z-10 flex flex-col">
+                <div className="w-full md:w-72 h-64 md:h-auto md:max-h-screen md:sticky md:top-0 border-l border-white/10 bg-stone-950 z-10 flex flex-col">
                     <GameLog logs={gameState.gameLog} commentary={gameState.commentary} isThinking={isAiThinking} />
                 </div>
 

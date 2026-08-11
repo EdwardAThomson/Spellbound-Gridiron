@@ -11,7 +11,7 @@ import {
   resolveTerrainStep as resolveTerrainStepPure,
   generateLavaHazards as generateLavaHazardsPure,
   advanceMeteor as advanceMeteorPure,
-  awardXp as awardXpPure,
+  resolveLevelUps as resolveLevelUpsPure,
   StepEffect,
   MeteorResolution,
   XpAward,
@@ -50,6 +50,7 @@ export {
   MAX_STAT_BUMP,
   ROLE_GROWTH,
   levelForXp,
+  bankXp,
   extractRoster,
   applyRoster,
   isRoster,
@@ -121,6 +122,6 @@ export const advanceMeteor = (
   upcomingTurn: number
 ): MeteorResolution => advanceMeteorPure(current, upcomingTurn, defaultRng);
 
-/** Award XP to a player (and apply any level-up bumps) using the real rng. */
-export const awardXp = (player: Player, amount: number): XpAward =>
-  awardXpPure(player, amount, defaultRng);
+/** Resolve a player's banked XP into level-ups (between games) with the real rng. */
+export const resolveLevelUps = (player: Player): XpAward =>
+  resolveLevelUpsPure(player, defaultRng);
