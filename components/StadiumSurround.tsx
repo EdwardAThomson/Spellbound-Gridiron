@@ -42,14 +42,21 @@ const MG = {
 };
 
 /** One spectator: shoulders and a head. */
-const Fan: React.FC<{ x: number; y: number; s: number; i: number; club: string }> = ({ x, y, s, i, club }) => {
+/** One spectator: shoulders and a head. `back` draws them from behind (near stand). */
+const Fan: React.FC<{ x: number; y: number; s: number; i: number; club: string; back?: boolean }> = ({ x, y, s, i, club, back }) => {
     const cloth = jitter(i, 21) < 0.3 ? club : MG.cloth[Math.floor(jitter(i, 22) * MG.cloth.length)];
     const hair = MG.hair[Math.floor(jitter(i, 23) * MG.hair.length)];
     return (
         <g>
             <rect x={x - 3.4 * s} y={y - 3.2 * s} width={6.8 * s} height={4.2 * s} rx={2 * s} fill={cloth} />
-            <circle cx={x} cy={y - 5.2 * s} r={2.3 * s} fill="#f1d3b3" />
-            <path d={`M${x - 2.4 * s},${y - 5.6 * s} a${2.4 * s},${2.4 * s} 0 0 1 ${4.8 * s},0 Z`} fill={hair} />
+            {back ? (
+                <circle cx={x} cy={y - 5.2 * s} r={2.4 * s} fill={hair} />
+            ) : (
+                <>
+                    <circle cx={x} cy={y - 5.2 * s} r={2.3 * s} fill="#f1d3b3" />
+                    <path d={`M${x - 2.4 * s},${y - 5.6 * s} a${2.4 * s},${2.4 * s} 0 0 1 ${4.8 * s},0 Z`} fill={hair} />
+                </>
+            )}
         </g>
     );
 };
@@ -232,6 +239,7 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
                 [x0 - apron - hoardH, y0 - apron - hoardH, x1 - x0 + 2 * (apron + hoardH), hoardH],
                 [x0 - apron - hoardH, y0 - apron, hoardH, y1 - y0 + 2 * apron],
                 [x1 + apron, y0 - apron, hoardH, y1 - y0 + 2 * apron],
+                [x0 - apron - hoardH, y1 + apron, x1 - x0 + 2 * (apron + hoardH), hoardH],
             ].map(([x, y, ww, hh], i) => (
                 <g key={`hb${i}`}>
                     <rect x={x} y={y} width={ww} height={hh} fill={MG.leafDark} />
@@ -239,22 +247,56 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
                 </g>
             ))}
 
-            {/* Near stand: only its leaf roof edge in the foreground */}
-            <rect x={0} y={y1 + apron + 6} width={w} height={h - y1} fill={MG.leafDark} />
-            <path d={leafFringe(0, w, y1 + apron + 4, -6)} fill={MG.leaf} transform={`translate(0 ${0})`} />
-            {Array.from({ length: Math.ceil(w / 60) }, (_, i) => (
-                <g key={`nl${i}`}>
-                    <circle cx={i * 60 + 30} cy={y1 + apron + 24} r="14" fill={`url(#${id}-glow)`} />
-                    <circle cx={i * 60 + 30} cy={y1 + apron + 24} r="2.4" fill={MG.lantern} />
-                </g>
-            ))}
-            {/* Club pennants on the near roof */}
-            {[w * 0.12, w * 0.88].map((x) => (
-                <g key={`pn${x}`}>
-                    <line x1={x} y1={h - 4} x2={x} y2={y1 + apron + 2} stroke={MG.stone} strokeWidth="1.5" />
-                    <path d={`M${x},${y1 + apron + 2} l16,5 l-16,5 Z`} fill={club} />
-                </g>
-            ))}
+            {/* Near stand: we look over the backs of its fans. Rows step down
+                toward the pitch and grow toward the camera (bottom of the frame). */}
+            {(() => {
+                const parts: React.ReactNode[] = [];
+                const top = y1 + apron + hoardH;
+                const roofH = Math.min(22, (h - top) * 0.2);
+                const bottom = h - roofH;
+                const rows = 3;
+                // Foreshortening: each row toward the camera is taller than the last.
+                const weights = [1, 1.25, 1.55];
+                const total = weights.reduce((a, b) => a + b, 0);
+                let y = top;
+                parts.push(<rect key="nb" x={0} y={top} width={w} height={h - top} fill={MG.stoneDark} />);
+                for (let r = 0; r < rows; r++) {
+                    const rh = ((bottom - top) * weights[r]) / total;
+                    const sc = Math.min(1.9, rh / 14);
+                    // Tread first, then the riser below it facing the camera.
+                    parts.push(<rect key={`nt${r}`} x={0} y={y} width={w} height={rh * 0.72} fill={MG.stone} />);
+                    parts.push(<rect key={`nr${r}`} x={0} y={y + rh * 0.72} width={w} height={rh * 0.28} fill={MG.riser} />);
+                    parts.push(<rect key={`nh${r}`} x={0} y={y} width={w} height="1.5" fill="#e8eee4" opacity="0.7" />);
+                    const step = 11 * sc;
+                    for (let x = step * 0.6; x < w - step * 0.4; x += step) {
+                        const aisle = Math.abs(((x - midX) % (step * 9) + step * 9) % (step * 9) - step * 4.5) > step * 4;
+                        if (aisle) {
+                            parts.push(<rect key={`na${r}-${x}`} x={x - step * 0.5} y={y} width={step} height={rh} fill={MG.stoneShade} />);
+                            continue;
+                        }
+                        // Seat backs face the pitch, so we see their plain backs.
+                        parts.push(<rect key={`ns${r}-${x}`} x={x - 4.4 * sc} y={y + rh * 0.3} width={8.8 * sc} height={rh * 0.42} rx={1.8 * sc} fill={r % 2 ? MG.seat : MG.seatDark} />);
+                        fanIdx++;
+                        if (jitter(fanIdx, 7) < 0.6) parts.push(<Fan key={`nf${r}-${x}`} x={x} y={y + rh * 0.42} s={sc} i={fanIdx} club={club} back />);
+                    }
+                    y += rh;
+                }
+                // The near stand sits under its own roof, so it darkens toward the camera.
+                parts.push(<rect key="nshade" x={0} y={top} width={w} height={bottom - top} fill={`url(#${id}-nearshade)`} />);
+                // The near stand's leaf roof, right in front of the camera.
+                parts.push(<rect key="nroof" x={0} y={bottom} width={w} height={roofH} fill={MG.leafDark} />);
+                parts.push(<path key="nfr" d={leafFringe(0, w, bottom + 2, -6)} fill={MG.leaf} />);
+                for (let i = 0; i < Math.ceil(w / 70); i++) {
+                    parts.push(<circle key={`ng${i}`} cx={i * 70 + 35} cy={bottom - 2} r="12" fill={`url(#${id}-glow)`} />);
+                    parts.push(<circle key={`nl${i}`} cx={i * 70 + 35} cy={bottom - 2} r="2.4" fill={MG.lantern} />);
+                }
+                // Club pennants on the near roof.
+                for (const x of [w * 0.12, w * 0.88]) {
+                    parts.push(<line key={`pl${x}`} x1={x} y1={h} x2={x} y2={bottom - 18} stroke={MG.stone} strokeWidth="1.5" />);
+                    parts.push(<path key={`pf${x}`} d={`M${x},${bottom - 18} l16,5 l-16,5 Z`} fill={club} />);
+                }
+                return parts;
+            })()}
         </g>
     );
 };
@@ -278,6 +320,10 @@ const MoongladeDefs: React.FC<{ id: string }> = ({ id }) => (
             <stop offset="0" stopColor={MG.stoneShade} />
             <stop offset="1" stopColor={MG.stone} />
         </linearGradient>
+        <linearGradient id={`${id}-nearshade`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#000" stopOpacity="0" />
+            <stop offset="1" stopColor="#000" stopOpacity="0.4" />
+        </linearGradient>
         <radialGradient id={`${id}-glow`}>
             <stop offset="0" stopColor={MG.lantern} stopOpacity="0.7" />
             <stop offset="1" stopColor={MG.lantern} stopOpacity="0" />
@@ -299,7 +345,7 @@ interface Scene {
 
 const SCENES: Record<string, Scene> = {
     'moonglade-bowl': {
-        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(44px, 5vw, 64px)',
+        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(100px, 13vw, 160px)',
         Defs: MoongladeDefs,
         Body: MoongladeScene,
     },
