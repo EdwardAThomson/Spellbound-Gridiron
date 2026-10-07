@@ -41,21 +41,32 @@ const MG = {
     cloth: ['#c7cfc4', '#9fb0a3', '#b9b2a2', '#8f9cab', '#d8d2c2'],
 };
 
-/** One spectator: shoulders and a head. */
-/** One spectator: shoulders and a head. `back` draws them from behind (near stand). */
-const Fan: React.FC<{ x: number; y: number; s: number; i: number; club: string; back?: boolean }> = ({ x, y, s, i, club, back }) => {
+/**
+ * One spectator seated facing the pitch. `facing` is the direction from the
+ * fan toward the pitch: the body (lap and shoulders) sits on that side, the
+ * head on the other. From the far stand we see faces; everywhere else we see
+ * the top of the head.
+ */
+type Facing = 'up' | 'down' | 'left' | 'right';
+const FACE: Record<Facing, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+const Fan: React.FC<{ x: number; y: number; s: number; i: number; club: string; facing: Facing }> = ({ x, y, s, i, club, facing }) => {
     const cloth = jitter(i, 21) < 0.3 ? club : MG.cloth[Math.floor(jitter(i, 22) * MG.cloth.length)];
     const hair = MG.hair[Math.floor(jitter(i, 23) * MG.hair.length)];
+    const [fx, fy] = FACE[facing];
+    const vertical = fy !== 0;
+    const bx = x + fx * 2.4 * s, by = y + fy * 2.4 * s;
+    const hx = x - fx * 2.6 * s, hy = y - fy * 2.6 * s;
+    const bw = vertical ? 6.8 * s : 4.4 * s, bh = vertical ? 4.4 * s : 6.8 * s;
     return (
         <g>
-            <rect x={x - 3.4 * s} y={y - 3.2 * s} width={6.8 * s} height={4.2 * s} rx={2 * s} fill={cloth} />
-            {back ? (
-                <circle cx={x} cy={y - 5.2 * s} r={2.4 * s} fill={hair} />
-            ) : (
+            <rect x={bx - bw / 2} y={by - bh / 2} width={bw} height={bh} rx={1.8 * s} fill={cloth} />
+            {facing === 'down' ? (
                 <>
-                    <circle cx={x} cy={y - 5.2 * s} r={2.3 * s} fill="#f1d3b3" />
-                    <path d={`M${x - 2.4 * s},${y - 5.6 * s} a${2.4 * s},${2.4 * s} 0 0 1 ${4.8 * s},0 Z`} fill={hair} />
+                    <circle cx={hx} cy={hy} r={2.3 * s} fill="#f1d3b3" />
+                    <path d={`M${hx - 2.4 * s},${hy - 0.4 * s} a${2.4 * s},${2.4 * s} 0 0 1 ${4.8 * s},0 Z`} fill={hair} />
                 </>
+            ) : (
+                <circle cx={hx} cy={hy} r={2.4 * s} fill={hair} />
             )}
         </g>
     );
@@ -116,7 +127,10 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
     const roofSide = L0 * 0.18, standSide = L0 - roofSide;
     const roofBot = (h - B0) * 0.22, standBot = h - B0 - roofBot;
     // Tier depths as fractions of each side's stand. Tiers nearer the camera are deeper.
-    const ft = [0.4, 0.72, 1], fs = [0.34, 0.67, 1], fb = [0.28, 0.6, 1];
+    // Three tiers of two rows, identical on every side so the rings line up at the corners.
+    const TIERS = 3, ROWS_PER_TIER = 2, NR = TIERS * ROWS_PER_TIER, AISLE = 110;
+    const tier = Array.from({ length: TIERS }, (_, k) => (k + 1) / TIERS);
+    const ft = tier, fs = tier, fb = tier;
     const L = [L0, ...fs.map((f) => L0 - standSide * f)];
     const R = [R0, ...fs.map((f) => R0 + standSide * f)];
     const T = [T0, ...ft.map((f) => T0 - standTop * f)];
@@ -130,90 +144,90 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
 
     let fanIdx = 0;
 
-    // --- Far stand: rows climb away from the pitch; we see each row's riser face.
+    // --- One row grid for the whole bowl. Every side has the same tiers and
+    // the same rows per tier, spaced evenly across that side's depth, so a row
+    // boundary on a long side meets the same boundary on a short side exactly
+    // on the corner seam. Perspective comes from the depths (the far stand is
+    // tall because we see its risers) and from seat and fan size, not from
+    // changing the grid.
     const far: React.ReactNode[] = [];
-    const farRowH = Math.min(22, Math.max(14, standTop / 7));
-    const farRows = Math.ceil(standTop / farRowH);
-    for (let i = 0; i < farRows; i++) {
+    const farRowH = standTop / NR;
+    for (let i = 0; i < NR; i++) {
         const yBot = T0 - i * farRowH, yTop = yBot - farRowH;
-        const s = 0.8 + 0.35 * (1 - i / farRows);
-        far.push(<rect key={`r${i}`} x={L3} y={yTop + farRowH * 0.5} width={R3 - L3} height={farRowH * 0.5} fill={MG.riser} />);
-        far.push(<rect key={`t${i}`} x={L3} y={yTop} width={R3 - L3} height={farRowH * 0.5} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
+        const s = Math.min(1.2, Math.max(0.7, farRowH / 18)) * (0.85 + 0.3 * (1 - i / NR));
+        far.push(<rect key={`r${i}`} x={L3} y={yTop + farRowH * 0.55} width={R3 - L3} height={farRowH * 0.45} fill={MG.riser} />);
+        far.push(<rect key={`t${i}`} x={L3} y={yTop} width={R3 - L3} height={farRowH * 0.55} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
         const step = 12 * s;
         for (let x = L3 + step; x < R3 - step / 2; x += step) {
-            const dx = ((x - midX) % 110 + 110) % 110;
-            if (Math.abs(dx - 55) > 49) continue;                       // aisle
-            if (Math.abs(x - midX) < 40 && i < 4) continue;               // royal box
-            far.push(<rect key={`s${i}-${x}`} x={x - 4 * s} y={yTop + farRowH * 0.06} width={8 * s} height={farRowH * 0.42} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
+            const dx = ((x - midX) % AISLE + AISLE) % AISLE;
+            if (Math.abs(dx - AISLE / 2) > AISLE / 2 - 6) continue;      // aisle
+            if (Math.abs(x - midX) < 40 && i < 3) continue;               // royal box
+            far.push(<rect key={`s${i}-${x}`} x={x - 4 * s} y={yTop + farRowH * 0.1} width={8 * s} height={farRowH * 0.45} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
             fanIdx++;
-            if (jitter(fanIdx, 5) < 0.62) far.push(<Fan key={`f${i}-${x}`} x={x} y={yTop + farRowH * 0.5} s={s} i={fanIdx} club={club} />);
+            if (jitter(fanIdx, 5) < 0.62) far.push(<Fan key={`f${i}-${x}`} x={x} y={yTop + farRowH * 0.42} s={s} i={fanIdx} club={club} facing="down" />);
         }
     }
-    // Aisle stairs down the far stand.
     for (let k = -8; k <= 8; k++) {
-        const ax = midX + k * 110 + 55;
+        const ax = midX + k * AISLE + AISLE / 2;
         if (ax < L3 || ax > R3) continue;
         far.push(<rect key={`a${k}`} x={ax - 6} y={T3} width="12" height={T0 - T3} fill={MG.stoneShade} />);
         for (let yy = T0 - farRowH / 2; yy > T3; yy -= farRowH / 2) far.push(<line key={`al${k}-${yy}`} x1={ax - 6} x2={ax + 6} y1={yy} y2={yy} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
     }
 
-    // --- Side stands: rows run along the touchline and step up and outward.
-    const sideRowW = Math.min(24, Math.max(14, standSide / 4));
+    // --- Side stands: the same rows run along the touchline; risers face the pitch.
+    const sideRowW = standSide / NR;
     const side = (dir: -1 | 1) => {
         const parts: React.ReactNode[] = [];
-        const rows = Math.ceil(standSide / sideRowW);
-        for (let i = 0; i < rows; i++) {
+        const facing: Facing = dir < 0 ? 'right' : 'left';
+        for (let i = 0; i < NR; i++) {
             const xIn = dir < 0 ? L0 - i * sideRowW : R0 + i * sideRowW;
             const xOut = xIn + dir * sideRowW;
             const xa = Math.min(xIn, xOut), xb = Math.max(xIn, xOut);
             parts.push(<rect key={`t${i}`} x={xa} y={T3} width={sideRowW} height={B3 - T3} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
-            // The riser faces the pitch.
-            parts.push(<rect key={`r${i}`} x={dir < 0 ? xb - sideRowW * 0.3 : xa} y={T3} width={sideRowW * 0.3} height={B3 - T3} fill={MG.riser} />);
-            const sx = dir < 0 ? xa + sideRowW * 0.38 : xb - sideRowW * 0.38;
+            parts.push(<rect key={`r${i}`} x={dir < 0 ? xb - sideRowW * 0.28 : xa} y={T3} width={sideRowW * 0.28} height={B3 - T3} fill={MG.riser} />);
+            const sx = dir < 0 ? xa + sideRowW * 0.4 : xb - sideRowW * 0.4;
             for (let y = T0 + 10; y < B0; y += 13) {
-                const s = 0.85 + 0.6 * ((y - T0) / (B0 - T0));           // nearer rows (lower) are bigger
+                const s = Math.min(1.1, Math.max(0.6, sideRowW / 16)) * (0.85 + 0.5 * ((y - T0) / (B0 - T0)));
                 const dy = ((y - T0) % 130 + 130) % 130;
-                if (Math.abs(dy - 65) > 58) continue;                      // aisle
-                parts.push(<rect key={`s${i}-${y}`} x={sx - sideRowW * 0.22} y={y - 4.5 * s} width={sideRowW * 0.44} height={9 * s} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
+                if (Math.abs(dy - 65) > 58) continue;
+                parts.push(<rect key={`s${i}-${y}`} x={sx - sideRowW * 0.2} y={y - 4.5 * s} width={sideRowW * 0.4} height={9 * s} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
                 fanIdx++;
-                if (jitter(fanIdx, 6) < 0.6) parts.push(<Fan key={`f${i}-${y}`} x={sx} y={y + 3 * s} s={s * 0.9} i={fanIdx} club={club} />);
+                if (jitter(fanIdx, 6) < 0.6) parts.push(<Fan key={`f${i}-${y}`} x={sx} y={y} s={s * 0.9} i={fanIdx} club={club} facing={facing} />);
             }
         }
-        // Aisle stairs across the side stand.
         for (let k = 0; k < 12; k++) {
             const ay = T0 + k * 130 + 65;
             if (ay > B0) break;
             const xa = dir < 0 ? L3 : R0, xb = dir < 0 ? L0 : R3;
-            parts.push(<rect key={`a${k}`} x={xa} y={ay - 7} width={xb - xa} height="14" fill={MG.stoneShade} />);
-            for (let xx = xa + sideRowW / 2; xx < xb; xx += sideRowW / 2) parts.push(<line key={`al${k}-${xx}`} x1={xx} x2={xx} y1={ay - 7} y2={ay + 7} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
+            parts.push(<rect key={`a${k}`} x={xa} y={ay - 6} width={xb - xa} height="12" fill={MG.stoneShade} />);
+            for (let xx = xa + sideRowW / 2; xx < xb; xx += sideRowW / 2) parts.push(<line key={`al${k}-${xx}`} x1={xx} x2={xx} y1={ay - 6} y2={ay + 6} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
         }
         return parts;
     };
 
-    // --- Near stand: seen from above and behind, rows step down to the pitch.
+    // --- Near stand: seen from above and behind; rows step down to the pitch.
     const near: React.ReactNode[] = [];
-    {
-        let y = B0, i = 0, rowH = Math.min(26, Math.max(16, standBot / 4.5));
-        while (y < B3) {
-            const s = 1.1 + 0.25 * i;
-            near.push(<rect key={`t${i}`} x={L3} y={y} width={R3 - L3} height={rowH} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
-            near.push(<rect key={`l${i}`} x={L3} y={y} width={R3 - L3} height="2" fill={MG.stoneDark} opacity="0.6" />);
-            const step = 12 * s;
-            for (let x = L3 + step; x < R3 - step / 2; x += step) {
-                const dx = ((x - midX) % 120 + 120) % 120;
-                if (Math.abs(dx - 60) > 54) continue;
-                near.push(<rect key={`s${i}-${x}`} x={x - 4.6 * s} y={y + rowH * 0.38} width={9.2 * s} height={rowH * 0.4} rx={2 * s} fill={i % 2 ? MG.seatDark : MG.seat} />);
-                fanIdx++;
-                if (jitter(fanIdx, 7) < 0.62) near.push(<Fan key={`f${i}-${x}`} x={x} y={y + rowH * 0.5} s={s} i={fanIdx} club={club} back />);
-            }
-            y += rowH; rowH *= 1.15; i++;
+    const nearRowH = standBot / NR;
+    for (let i = 0; i < NR; i++) {
+        const y = B0 + i * nearRowH;
+        const s = Math.min(1.6, Math.max(0.8, nearRowH / 16)) * (0.95 + 0.3 * (i / NR));
+        near.push(<rect key={`t${i}`} x={L3} y={y} width={R3 - L3} height={nearRowH} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
+        near.push(<rect key={`l${i}`} x={L3} y={y} width={R3 - L3} height="2" fill={MG.stoneDark} opacity="0.6" />);
+        const step = 12 * s;
+        for (let x = L3 + step; x < R3 - step / 2; x += step) {
+            const dx = ((x - midX) % AISLE + AISLE) % AISLE;
+            if (Math.abs(dx - AISLE / 2) > AISLE / 2 - 7) continue;
+            // Seat back on the camera side; the fan's lap reaches toward the pitch and the head sits over the back.
+            near.push(<rect key={`s${i}-${x}`} x={x - 4.4 * s} y={y + nearRowH * 0.5} width={8.8 * s} height={nearRowH * 0.38} rx={2 * s} fill={i % 2 ? MG.seatDark : MG.seat} />);
+            fanIdx++;
+            if (jitter(fanIdx, 7) < 0.62) near.push(<Fan key={`f${i}-${x}`} x={x} y={y + nearRowH * 0.5} s={s} i={fanIdx} club={club} facing="up" />);
         }
-        for (let k = -8; k <= 8; k++) {
-            const ax = midX + k * 120 + 60;
-            if (ax < L3 || ax > R3) continue;
-            near.push(<rect key={`a${k}`} x={ax - 7} y={B0} width="14" height={B3 - B0} fill={MG.stoneShade} />);
-            for (let yy = B0 + 8; yy < B3; yy += 9) near.push(<line key={`al${k}-${yy}`} x1={ax - 7} x2={ax + 7} y1={yy} y2={yy} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
-        }
+    }
+    for (let k = -8; k <= 8; k++) {
+        const ax = midX + k * AISLE + AISLE / 2;
+        if (ax < L3 || ax > R3) continue;
+        near.push(<rect key={`a${k}`} x={ax - 7} y={B0} width="14" height={B3 - B0} fill={MG.stoneShade} />);
+        for (let yy = B0 + 8; yy < B3; yy += 9) near.push(<line key={`al${k}-${yy}`} x1={ax - 7} x2={ax + 7} y1={yy} y2={yy} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
     }
 
     const lanterns: React.ReactNode[] = [];
@@ -355,7 +369,7 @@ interface Scene {
 
 const SCENES: Record<string, Scene> = {
     'moonglade-bowl': {
-        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(90px, 11vw, 136px)',
+        padding: 'clamp(150px, 20vw, 230px) clamp(92px, 11vw, 140px) clamp(96px, 12vw, 140px)',
         Defs: MoongladeDefs,
         Body: MoongladeScene,
     },
