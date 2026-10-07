@@ -2,184 +2,314 @@ import React, { useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
 import { Stadium } from '../services/stadiums';
 import { CLUB_COLORS, jitter } from './StadiumArt';
 
-// A top-down stadium drawn around the live board: banked stands on all four
-// sides with a crowd in them, a wall at the pitch edge, and set-dressing for
-// the venue (Moonglade's trees, the Gutterpit's palisade, Anvilhold's lava moat,
-// Barrowfrost's ice spires and graves). It wraps the board as padding plus an
-// SVG behind it, sized to the measured layout so the crowd stays round. Purely
-// decorative: pointer-events are off and the board inside is untouched.
-
-interface Theme {
-    outer: string;
-    stand: string;
-    tier: string;
-    wall: string;
-    crowd: string[];
-}
-
-const THEMES: Record<string, Theme> = {
-    'moonglade-bowl': { outer: '#0f2a1a', stand: '#1d4a2c', tier: '#2d6a40', wall: '#a3e635', crowd: ['#bbf7d0', '#fef9c3', '#93c5fd', '#f0abfc'] },
-    'the-gutterpit': { outer: '#2b1d12', stand: '#4a3220', tier: '#5e4029', wall: '#7c4f2a', crowd: ['#65a30d', '#4d7c0f', '#a3a3a3', '#84cc16'] },
-    'anvilhold-forge': { outer: '#1c1917', stand: '#3a3532', tier: '#57534e', wall: '#f97316', crowd: ['#eab308', '#a8a29e', '#b45309', '#fcd34d'] },
-    'barrowfrost': { outer: '#0b1020', stand: '#1e293b', tier: '#334155', wall: '#7dd3fc', crowd: ['#c4b5fd', '#94a3b8', '#86efac', '#e2e8f0'] },
-    'neutral-ground': { outer: '#44403c', stand: '#57534e', tier: '#78716c', wall: '#e7e5e4', crowd: ['#e7e5e4', '#a8a29e', '#fca5a5', '#93c5fd'] },
-};
+// The stadium drawn around the live board, in a 3/4 view: the camera sits
+// above the near (bottom) end looking up the pitch, so the far stand rises
+// tall behind the top endzone, the side stands step up and away from the
+// touchlines, and the near stand is only a foreground roof edge. The board
+// itself stays flat and untouched inside; this is padding plus an SVG behind
+// it, sized to the measured layout. Purely decorative (pointer-events off).
+//
+// Venues are redrawn one at a time. Only Moonglade Bowl has a scene so far;
+// any other venue renders the board with no frame.
 
 interface Box { w: number; h: number; x0: number; y0: number; x1: number; y1: number }
 
-const CROWD_STEP = 7;
 /** Largest stadium edge we draw, in px; a real board is well under this. */
 const MAX_SIDE = 3000;
 
-/** Spectator dots filling the stands, between the pitch wall and the outer decor margin. */
-const crowdDots = (b: Box, colors: string[], margin: number) => {
-    const dots: React.ReactNode[] = [];
-    let i = 0;
-    for (let y = margin; y < b.h - margin; y += CROWD_STEP) {
-        for (let x = margin + ((y / CROWD_STEP) % 2 ? CROWD_STEP / 2 : 0); x < b.w - margin; x += CROWD_STEP) {
-            const inPitch = x > b.x0 - 7 && x < b.x1 + 7 && y > b.y0 - 7 && y < b.y1 + 7;
-            if (!inPitch && jitter(i, 3) > 0.12) {
-                dots.push(
-                    <circle
-                        key={i}
-                        cx={x + (jitter(i, 1) - 0.5) * 2}
-                        cy={y + (jitter(i, 2) - 0.5) * 2}
-                        r={1.9}
-                        fill={colors[Math.floor(jitter(i, 4) * colors.length)]}
-                    />
-                );
+// --- Moonglade Bowl -----------------------------------------------------------
+
+const MG = {
+    skyTop: '#0a1430',
+    skyBottom: '#2a4a74',
+    treeFar: '#10261c',
+    treeNear: '#163524',
+    stone: '#c9d2c2',
+    stoneShade: '#8e9a8a',
+    stoneDark: '#5d6a5c',
+    riser: '#6f7d6d',
+    seat: '#2f7d4f',
+    seatDark: '#215c3a',
+    apron: '#24502c',
+    leaf: '#1f6b3a',
+    leafLight: '#2f8f50',
+    leafDark: '#123f24',
+    gold: '#f3d27a',
+    lantern: '#fde68a',
+    // Muted crowd colours so the crowd reads as texture, with the club colour as the accent.
+    hair: ['#3b2a1e', '#5b4330', '#2a211b', '#8a6a45', '#c9b27a'],
+    cloth: ['#c7cfc4', '#9fb0a3', '#b9b2a2', '#8f9cab', '#d8d2c2'],
+};
+
+/** One spectator: shoulders and a head. */
+const Fan: React.FC<{ x: number; y: number; s: number; i: number; club: string }> = ({ x, y, s, i, club }) => {
+    const cloth = jitter(i, 21) < 0.3 ? club : MG.cloth[Math.floor(jitter(i, 22) * MG.cloth.length)];
+    const hair = MG.hair[Math.floor(jitter(i, 23) * MG.hair.length)];
+    return (
+        <g>
+            <rect x={x - 3.4 * s} y={y - 3.2 * s} width={6.8 * s} height={4.2 * s} rx={2 * s} fill={cloth} />
+            <circle cx={x} cy={y - 5.2 * s} r={2.3 * s} fill="#f1d3b3" />
+            <path d={`M${x - 2.4 * s},${y - 5.6 * s} a${2.4 * s},${2.4 * s} 0 0 1 ${4.8 * s},0 Z`} fill={hair} />
+        </g>
+    );
+};
+
+/** A lantern on a slender pole, with its glow. */
+const LanternPole: React.FC<{ x: number; base: number; top: number; id: string }> = ({ x, base, top, id }) => (
+    <g>
+        <line x1={x} y1={base} x2={x} y2={top} stroke={MG.stoneDark} strokeWidth="3" />
+        <line x1={x} y1={base} x2={x} y2={top} stroke={MG.stone} strokeWidth="1" opacity="0.6" />
+        <path d={`M${x},${top} q-10,-4 -12,-14 M${x},${top} q10,-4 12,-14`} stroke={MG.stoneDark} strokeWidth="2" fill="none" />
+        <circle cx={x} cy={top - 4} r="26" fill={`url(#${id}-glow)`} />
+        <path d={`M${x - 5},${top - 1} L${x + 5},${top - 1} L${x + 3.5},${top - 11} L${x - 3.5},${top - 11} Z`} fill={MG.lantern} stroke={MG.gold} strokeWidth="1" />
+        <path d={`M${x - 6},${top - 11} L${x + 6},${top - 11} L${x},${top - 17} Z`} fill={MG.stoneDark} />
+    </g>
+);
+
+/** A scalloped canopy of leaves along a horizontal edge (the roof's hanging fringe). */
+const leafFringe = (x0: number, x1: number, y: number, depth: number) => {
+    const n = Math.max(2, Math.round((x1 - x0) / 22));
+    const step = (x1 - x0) / n;
+    let d = `M${x0},${y - depth}`;
+    for (let i = 0; i < n; i++) {
+        const a = x0 + i * step;
+        d += ` Q${a + step / 2},${y + depth * (0.55 + jitter(i, 31) * 0.5)} ${a + step},${y - depth * 0.15}`;
+    }
+    return d + ` L${x1},${y - depth * 2} L${x0},${y - depth * 2} Z`;
+};
+
+const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string }> = ({ b, id, club, label }) => {
+    const { w, h, x0, y0, x1, y1 } = b;
+    const midX = (x0 + x1) / 2;
+    const sideW = x0;                     // width of each side stand
+    const apron = 10;                     // grass between the pitch and the hoardings
+    const hoardH = 9;                     // pitch-side boards
+
+    // Far stand: from the roof line down to the hoardings above the top endzone.
+    const farTop = y0 * 0.34;
+    const farBottom = y0 - apron - hoardH;
+    const farRows = 5;
+    const farRowH = (farBottom - farTop) / farRows;
+    const farLeft = x0 - sideW * 0.55;
+    const farRight = x1 + sideW * 0.55;
+
+    // Side stands: rows run alongside the touchline and step up and outward.
+    const sideRows = 3;
+    const sideRowW = (sideW - apron - hoardH) / sideRows;
+    const sideRise = farRowH * 1.1;       // each row further out starts higher, so the tiers visibly step up
+
+    const els: React.ReactNode[] = [];
+    let fanIdx = 0;
+
+    // Far stand rows, back (top) to front (bottom) so nearer rows overlap.
+    for (let r = 0; r < farRows; r++) {
+        const top = farTop + r * farRowH;
+        els.push(<rect key={`fr${r}`} x={farLeft} y={top} width={farRight - farLeft} height={farRowH * 0.38} fill={MG.riser} />);
+        els.push(<rect key={`ft${r}`} x={farLeft} y={top + farRowH * 0.38} width={farRight - farLeft} height={farRowH * 0.62} fill={MG.stone} />);
+        const seatY = top + farRowH * 0.38;
+        for (let x = farLeft + 9; x < farRight - 8; x += 14) {
+            const aisle = Math.abs(((x - midX) % 96 + 96) % 96 - 48) > 42;
+            if (aisle) continue;
+            els.push(<rect key={`fs${r}-${x}`} x={x - 5.5} y={seatY + 2} width="11" height={farRowH * 0.4} rx="2" fill={r % 2 ? MG.seat : MG.seatDark} />);
+            fanIdx++;
+            if (jitter(fanIdx, 5) < 0.6 && !(r < 3 && Math.abs(x - midX) < 44)) {
+                els.push(<Fan key={`ff${r}-${x}`} x={x} y={seatY + farRowH * 0.52} s={Math.min(1.5, farRowH / 16)} i={fanIdx} club={club} />);
             }
-            i++;
         }
     }
-    return dots;
-};
-
-/** Points spaced evenly around a rectangle's perimeter, inset by `inset`. */
-const perimeter = (b: Box, inset: number, step: number) => {
-    const pts: [number, number][] = [];
-    const x0 = inset, y0 = inset, x1 = b.w - inset, y1 = b.h - inset;
-    for (let x = x0; x <= x1; x += step) { pts.push([x, y0]); pts.push([x, y1]); }
-    for (let y = y0 + step; y < y1; y += step) { pts.push([x0, y]); pts.push([x1, y]); }
-    return pts;
-};
-
-const corners = (b: Box, inset: number): [number, number][] => [
-    [inset, inset], [b.w - inset, inset], [inset, b.h - inset], [b.w - inset, b.h - inset],
-];
-
-const Decor: React.FC<{ id: string; stadiumId: string; b: Box; club: string }> = ({ id, stadiumId, b, club }) => {
-    const midX = b.w / 2;
-    switch (stadiumId) {
-        case 'moonglade-bowl':
-            return (
-                <g>
-                    {perimeter(b, 2, 22).map(([x, y], i) => (
-                        <g key={i}>
-                            <circle cx={x} cy={y} r={9 + jitter(i, 7) * 4} fill={i % 3 ? '#1f6b3a' : '#2d8a4e'} />
-                            <circle cx={x - 2} cy={y - 2} r={4 + jitter(i, 8) * 2} fill="#3fa564" opacity="0.7" />
-                        </g>
-                    ))}
-                    {[...corners(b, 16), [midX, 16] as [number, number], [midX, b.h - 16] as [number, number]].map(([x, y], i) => (
-                        <g key={`l${i}`}>
-                            <circle cx={x} cy={y} r="11" fill={`url(#${id}-glow)`} />
-                            <circle cx={x} cy={y} r="2.5" fill="#fef3c7" />
-                        </g>
-                    ))}
-                </g>
-            );
-        case 'the-gutterpit':
-            return (
-                <g>
-                    {perimeter(b, 4, 7).map(([x, y], i) => (
-                        <circle key={i} cx={x} cy={y} r="3.6" fill={i % 2 ? '#6b4423' : '#7c4f2a'} stroke="#2b1a0e" strokeWidth="0.8" />
-                    ))}
-                    {corners(b, 16).map(([x, y], i) => (
-                        <g key={`t${i}`}>
-                            <circle cx={x} cy={y} r="16" fill={`url(#${id}-glow)`} />
-                            <circle cx={x} cy={y} r="3.5" fill="#f97316" />
-                            <circle cx={x} cy={y} r="1.6" fill="#fde047" />
-                        </g>
-                    ))}
-                    {[[midX - 40, b.h - 12], [midX + 40, b.h - 12], [12, b.h / 2], [b.w - 12, b.h / 2]].map(([x, y], i) => (
-                        <g key={`s${i}`}>
-                            <circle cx={x} cy={y} r="4" fill="#e7e5e4" />
-                            <circle cx={x - 1.4} cy={y - 0.6} r="0.9" fill="#1c1917" />
-                            <circle cx={x + 1.4} cy={y - 0.6} r="0.9" fill="#1c1917" />
-                        </g>
-                    ))}
-                </g>
-            );
-        case 'anvilhold-forge':
-            return (
-                <g>
-                    {/* Lava moat between the stands and the pitch */}
-                    <rect x={b.x0 - 5} y={b.y0 - 5} width={b.x1 - b.x0 + 10} height={b.y1 - b.y0 + 10} rx="4" fill="none" stroke="#ea580c" strokeWidth="9" opacity="0.35" />
-                    <rect x={b.x0 - 5} y={b.y0 - 5} width={b.x1 - b.x0 + 10} height={b.y1 - b.y0 + 10} rx="4" fill="none" stroke={`url(#${id}-lava)`} strokeWidth="3" />
-                    {/* Outer wall of cut stone blocks */}
-                    {perimeter(b, 4, 14).map(([x, y], i) => (
-                        <rect key={i} x={x - 6} y={y - 4} width="12" height="8" fill={i % 2 ? '#44403c' : '#57534e'} stroke="#1c1917" strokeWidth="0.8" />
-                    ))}
-                    {/* Rune pillars at the corners */}
-                    {corners(b, 14).map(([x, y], i) => (
-                        <g key={`p${i}`}>
-                            <rect x={x - 11} y={y - 11} width="22" height="22" fill="#44403c" stroke="#1c1917" strokeWidth="1.5" />
-                            <path d={`M${x - 5},${y - 3} L${x},${y + 4} L${x + 5},${y - 3}`} stroke="#fb923c" strokeWidth="1.6" fill="none" />
-                        </g>
-                    ))}
-                    {/* Anvil crests at each end */}
-                    {[14, b.h - 14].map((y) => (
-                        <path key={y} transform={`translate(${midX} ${y - 4})`} d="M-12,-3 L9,-3 Q15,-3 16,0 L6,1.5 L4.5,6 L7.5,9 L-7.5,9 L-4.5,6 L-6,1.5 L-12,1.5 Z" fill="#a8a29e" stroke="#eab308" strokeWidth="1" />
-                    ))}
-                </g>
-            );
-        case 'barrowfrost':
-            return (
-                <g>
-                    {/* Tombstones around the outer ring */}
-                    {perimeter(b, 7, 26).map(([x, y], i) => (
-                        <g key={i}>
-                            <rect x={x - 4} y={y - 5} width="8" height="10" rx="3" fill="#64748b" stroke="#334155" strokeWidth="0.8" />
-                            <line x1={x} y1={y - 3} x2={x} y2={y + 3} stroke="#334155" strokeWidth="0.8" />
-                            <line x1={x - 2} y1={y - 1} x2={x + 2} y2={y - 1} stroke="#334155" strokeWidth="0.8" />
-                        </g>
-                    ))}
-                    {/* Ice spires at the corners, seen from above */}
-                    {corners(b, 16).map(([x, y], i) => (
-                        <g key={`i${i}`}>
-                            <circle cx={x} cy={y} r="15" fill={`url(#${id}-glow)`} />
-                            <polygon points={`${x},${y - 14} ${x + 4},${y - 4} ${x + 14},${y} ${x + 4},${y + 4} ${x},${y + 14} ${x - 4},${y + 4} ${x - 14},${y} ${x - 4},${y - 4}`} fill="#bae6fd" stroke="#7dd3fc" strokeWidth="0.8" />
-                        </g>
-                    ))}
-                </g>
-            );
-        default:
-            return (
-                <g>
-                    {corners(b, 12).map(([x, y], i) => (
-                        <g key={i}>
-                            <circle cx={x} cy={y} r="14" fill={`url(#${id}-glow)`} />
-                            <rect x={x - 5} y={y - 5} width="10" height="10" fill="#fef9c3" stroke="#78716c" />
-                        </g>
-                    ))}
-                </g>
-            );
+    // Aisle stairs down the far stand.
+    for (let k = -6; k <= 6; k++) {
+        const ax = midX + k * 96 + 48;
+        if (ax < farLeft + 6 || ax > farRight - 6) continue;
+        els.push(<rect key={`fa${k}`} x={ax - 5} y={farTop} width="10" height={farBottom - farTop} fill={MG.stoneShade} />);
+        for (let r = 0; r < farRows * 2; r++) {
+            els.push(<line key={`fas${k}-${r}`} x1={ax - 5} x2={ax + 5} y1={farTop + (r + 1) * farRowH / 2} y2={farTop + (r + 1) * farRowH / 2} stroke={MG.stoneDark} strokeWidth="1" />);
+        }
     }
+
+    // Side stands (left and right are mirror images).
+    const side = (dir: -1 | 1) => {
+        const parts: React.ReactNode[] = [];
+        const inner = dir < 0 ? x0 - apron - hoardH : x1 + apron + hoardH;
+        for (let r = sideRows - 1; r >= 0; r--) {
+            const near = inner + dir * r * sideRowW;
+            const far = inner + dir * (r + 1) * sideRowW;
+            const top = y0 - apron - r * sideRise;
+            const bottom = y1 + apron - r * sideRise * 0.35;
+            const xa = Math.min(near, far), xb = Math.max(near, far);
+            // Tread and riser of the row (the riser faces the pitch).
+            parts.push(<rect key={`st${dir}${r}`} x={xa} y={top} width={xb - xa} height={bottom - top} fill={`url(#${id}-tread${dir < 0 ? 'L' : 'R'})`} />);
+            // The riser faces the pitch and the tread lights up outward, so each tier reads as a step.
+            const riserX = dir < 0 ? xb - sideRowW * 0.3 : xa;
+            parts.push(<rect key={`sr${dir}${r}`} x={riserX} y={top} width={sideRowW * 0.3} height={bottom - top} fill={MG.riser} />);
+            parts.push(<rect key={`sh${dir}${r}`} x={dir < 0 ? xa : xb - 2} y={top} width="2" height={bottom - top} fill="#e8eee4" opacity="0.7" />);
+            parts.push(<rect key={`sc${dir}${r}`} x={xa} y={top} width={xb - xa} height="4" fill={MG.stoneDark} />);
+            const s = Math.min(1.4, sideRowW / 18);
+            for (let y = top + 14; y < bottom - 8; y += 15) {
+                const aisle = Math.abs(((y - y0) % 150 + 150) % 150 - 75) > 66;
+                if (aisle) {
+                    parts.push(<rect key={`sa${dir}${r}-${y}`} x={xa} y={y - 6} width={xb - xa} height="12" fill={MG.stoneShade} />);
+                    continue;
+                }
+                const sx = (xa + xb) / 2 - dir * sideRowW * 0.1;
+                parts.push(<rect key={`ss${dir}${r}-${y}`} x={sx - sideRowW * 0.24} y={y - 5} width={sideRowW * 0.48} height="11" rx="2" fill={r % 2 ? MG.seat : MG.seatDark} />);
+                fanIdx++;
+                if (jitter(fanIdx, 6) < 0.55) parts.push(<Fan key={`sf${dir}${r}-${y}`} x={sx} y={y + 4} s={s} i={fanIdx} club={club} />);
+            }
+        }
+        // Back wall of the side stand, with slender pillars holding its canopy.
+        const wallX = dir < 0 ? 0 : w;
+        const backEdge = inner + dir * sideRows * sideRowW;
+        parts.push(<rect key={`sw${dir}`} x={Math.min(wallX, backEdge)} y={0} width={Math.abs(wallX - backEdge)} height={h} fill={MG.stoneDark} />);
+        // A leaf canopy over the back of the stand, on slender silver pillars.
+        const canopyW = sideRowW * 0.9;
+        const cx0 = dir < 0 ? backEdge - 2 : backEdge - canopyW + 2;
+        parts.push(<rect key={`sk${dir}`} x={cx0} y={0} width={canopyW} height={h} fill={MG.leafDark} />);
+        parts.push(
+            <path
+                key={`sf${dir}`}
+                d={leafFringe(0, h, 0, 6)}
+                fill={MG.leaf}
+                transform={dir < 0 ? `translate(${cx0 + canopyW + 6} 0) rotate(90)` : `translate(${cx0 - 6} ${h}) rotate(-90)`}
+            />
+        );
+        for (let y = y0 + 40; y < y1; y += 110) {
+            parts.push(<rect key={`sp${dir}${y}`} x={dir < 0 ? cx0 + canopyW + 2 : cx0 - 5} y={y} width="3" height="34" fill={MG.stone} />);
+            parts.push(<circle key={`sl${dir}${y}`} cx={dir < 0 ? cx0 + canopyW + 3.5 : cx0 - 3.5} cy={y} r="10" fill={`url(#${id}-glow)`} />);
+        }
+        return parts;
+    };
+
+    return (
+        <g>
+            {/* Night sky over the far stand, with the moon and stars */}
+            <rect width={w} height={h} fill={MG.stoneDark} />
+            <rect width={w} height={farTop + 30} fill={`url(#${id}-sky)`} />
+            {Array.from({ length: 28 }, (_, i) => (
+                <circle key={`st${i}`} cx={jitter(i, 1) * w} cy={jitter(i, 2) * farTop * 0.55} r={0.5 + jitter(i, 3) * 0.9} fill="#e0f2fe" opacity={0.45 + jitter(i, 4) * 0.5} />
+            ))}
+            <circle cx={w * 0.8} cy={farTop * 0.22} r="11" fill="#f1f5f9" />
+            <circle cx={w * 0.8 + 5} cy={farTop * 0.22 - 4} r="10" fill={MG.skyTop} />
+            {/* The forest the bowl is carved from, on the horizon */}
+            {Array.from({ length: Math.ceil(w / 34) + 1 }, (_, i) => (
+                <ellipse key={`tf${i}`} cx={i * 34} cy={farTop * 0.62} rx={26} ry={16 + jitter(i, 9) * 10} fill={MG.treeFar} />
+            ))}
+            {Array.from({ length: Math.ceil(w / 46) + 1 }, (_, i) => (
+                <ellipse key={`tn${i}`} cx={i * 46 + 20} cy={farTop * 0.8} rx={32} ry={18 + jitter(i, 10) * 8} fill={MG.treeNear} />
+            ))}
+
+            {/* Side stands first (they sit behind the far stand's ends) */}
+            {side(-1)}
+            {side(1)}
+
+            {/* Far stand: back wall, seating tiers, then its leaf roof */}
+            <rect x={farLeft - 6} y={farTop - 6} width={farRight - farLeft + 12} height={farBottom - farTop + 6} fill={MG.stoneDark} />
+            {els}
+            {/* Shade under the roof on the upper rows */}
+            <rect x={farLeft} y={farTop} width={farRight - farLeft} height={farRowH * 2.5} fill={`url(#${id}-shade)`} />
+            {/* Royal box at the centre of the far stand */}
+            <g>
+                <rect x={midX - 34} y={farTop + farRowH * 0.2} width="68" height={farRowH * 1.9} rx="3" fill={MG.stoneShade} stroke={MG.gold} strokeWidth="1.2" />
+                <path d={`M${midX - 38},${farTop + farRowH * 0.25} Q${midX},${farTop - farRowH * 0.9} ${midX + 38},${farTop + farRowH * 0.25} Z`} fill={MG.leaf} stroke={MG.gold} strokeWidth="1" />
+                <rect x={midX - 9} y={farTop + farRowH * 0.6} width="18" height={farRowH * 1.9} fill={club} />
+                <path d={`M${midX - 9},${farTop + farRowH * 2.5} L${midX},${farTop + farRowH * 2.1} L${midX + 9},${farTop + farRowH * 2.5} Z`} fill={MG.stoneShade} />
+                <path d={`M${midX},${farTop + farRowH * 0.9} l3,5 h-6 Z`} fill={MG.gold} />
+            </g>
+            {/* Leaf canopy roof with the venue name on its fascia */}
+            <path d={`M${farLeft - 22},${farTop - 2} Q${midX},${farTop - farRowH * 1.6} ${farRight + 22},${farTop - 2} L${farRight + 22},${farTop + 8} Q${midX},${farTop - farRowH * 1.1} ${farLeft - 22},${farTop + 8} Z`} fill={MG.leafDark} />
+            <path d={leafFringe(farLeft - 22, farRight + 22, farTop + 10, 7)} fill={MG.leaf} />
+            <path d={`M${farLeft - 22},${farTop - 2} Q${midX},${farTop - farRowH * 1.6} ${farRight + 22},${farTop - 2}`} stroke={MG.leafLight} strokeWidth="3" fill="none" />
+            <rect x={midX - 78} y={farTop - farRowH * 1.05 - 9} width="156" height="18" rx="9" fill={MG.leafDark} stroke={MG.gold} strokeWidth="1" />
+            <text x={midX} y={farTop - farRowH * 1.05 + 4} textAnchor="middle" fontSize="10.5" fontWeight="700" letterSpacing="2.5" fill={MG.gold}>{label.toUpperCase()}</text>
+
+            {/* Lantern towers at the corners of the far stand */}
+            <LanternPole x={farLeft - 10} base={farBottom} top={farTop - farRowH * 1.4} id={id} />
+            <LanternPole x={farRight + 10} base={farBottom} top={farTop - farRowH * 1.4} id={id} />
+
+            {/* Grass apron and the pitch-side boards */}
+            <rect x={x0 - apron} y={y0 - apron} width={x1 - x0 + apron * 2} height={y1 - y0 + apron * 2} fill={MG.apron} />
+            {[
+                [x0 - apron - hoardH, y0 - apron - hoardH, x1 - x0 + 2 * (apron + hoardH), hoardH],
+                [x0 - apron - hoardH, y0 - apron, hoardH, y1 - y0 + 2 * apron],
+                [x1 + apron, y0 - apron, hoardH, y1 - y0 + 2 * apron],
+            ].map(([x, y, ww, hh], i) => (
+                <g key={`hb${i}`}>
+                    <rect x={x} y={y} width={ww} height={hh} fill={MG.leafDark} />
+                    <rect x={x} y={y} width={ww} height={hh} fill={`url(#${id}-runes)`} opacity="0.9" />
+                </g>
+            ))}
+
+            {/* Near stand: only its leaf roof edge in the foreground */}
+            <rect x={0} y={y1 + apron + 6} width={w} height={h - y1} fill={MG.leafDark} />
+            <path d={leafFringe(0, w, y1 + apron + 4, -6)} fill={MG.leaf} transform={`translate(0 ${0})`} />
+            {Array.from({ length: Math.ceil(w / 60) }, (_, i) => (
+                <g key={`nl${i}`}>
+                    <circle cx={i * 60 + 30} cy={y1 + apron + 24} r="14" fill={`url(#${id}-glow)`} />
+                    <circle cx={i * 60 + 30} cy={y1 + apron + 24} r="2.4" fill={MG.lantern} />
+                </g>
+            ))}
+            {/* Club pennants on the near roof */}
+            {[w * 0.12, w * 0.88].map((x) => (
+                <g key={`pn${x}`}>
+                    <line x1={x} y1={h - 4} x2={x} y2={y1 + apron + 2} stroke={MG.stone} strokeWidth="1.5" />
+                    <path d={`M${x},${y1 + apron + 2} l16,5 l-16,5 Z`} fill={club} />
+                </g>
+            ))}
+        </g>
+    );
 };
 
-const GLOW: Record<string, string> = {
-    'moonglade-bowl': '#fde68a',
-    'the-gutterpit': '#fb923c',
-    'anvilhold-forge': '#f97316',
-    'barrowfrost': '#a855f7',
-    'neutral-ground': '#fef9c3',
+const MoongladeDefs: React.FC<{ id: string }> = ({ id }) => (
+    <>
+        <linearGradient id={`${id}-sky`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={MG.skyTop} />
+            <stop offset="1" stopColor={MG.skyBottom} />
+        </linearGradient>
+        <linearGradient id={`${id}-shade`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#000" stopOpacity="0.45" />
+            <stop offset="1" stopColor="#000" stopOpacity="0" />
+        </linearGradient>
+        {/* Side-stand treads: shaded at the pitch end, lit toward the back */}
+        <linearGradient id={`${id}-treadL`} x1="1" y1="0" x2="0" y2="0">
+            <stop offset="0" stopColor={MG.stoneShade} />
+            <stop offset="1" stopColor={MG.stone} />
+        </linearGradient>
+        <linearGradient id={`${id}-treadR`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor={MG.stoneShade} />
+            <stop offset="1" stopColor={MG.stone} />
+        </linearGradient>
+        <radialGradient id={`${id}-glow`}>
+            <stop offset="0" stopColor={MG.lantern} stopOpacity="0.7" />
+            <stop offset="1" stopColor={MG.lantern} stopOpacity="0" />
+        </radialGradient>
+        <pattern id={`${id}-runes`} width="28" height="9" patternUnits="userSpaceOnUse">
+            <path d="M4,7 L7,2 L10,7 M14,2 L14,7 M18,7 L21,2 L24,7 M17,4.5 L22,4.5" stroke={MG.gold} strokeWidth="0.9" fill="none" opacity="0.8" />
+        </pattern>
+    </>
+);
+
+// --- Venue registry ------------------------------------------------------------
+
+interface Scene {
+    /** CSS padding around the board that the scene draws into. */
+    padding: string;
+    Defs: React.FC<{ id: string }>;
+    Body: React.FC<{ b: Box; id: string; club: string; label: string }>;
+}
+
+const SCENES: Record<string, Scene> = {
+    'moonglade-bowl': {
+        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(44px, 5vw, 64px)',
+        Defs: MoongladeDefs,
+        Body: MoongladeScene,
+    },
 };
 
 interface StadiumSurroundProps {
     stadium: Stadium;
-    /** Home club colour name for the pennants; omitted outside the campaign. */
+    /** Home club colour name for scarves and banners; omitted outside the campaign. */
     clubColor?: string;
-    /** Text on the name plaque (defaults to the stadium's name). */
+    /** Text on the roof fascia (defaults to the stadium's name). */
     label?: string;
     children: React.ReactNode;
 }
@@ -189,11 +319,12 @@ export default function StadiumSurround({ stadium, clubColor, label, children }:
     const innerRef = useRef<HTMLDivElement>(null);
     const [box, setBox] = useState<Box | null>(null);
     const id = `surround-${useId().replace(/:/g, '')}`;
+    const scene = SCENES[stadium.id];
 
     useLayoutEffect(() => {
         const el = ref.current;
         const inner = innerRef.current;
-        if (!el || !inner) return;
+        if (!el || !inner || !scene) return;
         const measure = () => {
             const next = {
                 w: el.offsetWidth, h: el.offsetHeight,
@@ -207,109 +338,42 @@ export default function StadiumSurround({ stadium, clubColor, label, children }:
         ro.observe(el);
         ro.observe(inner);
         return () => ro.disconnect();
-    }, []);
+    }, [scene]);
 
-    // The crowd is a few thousand nodes, so only rebuild it when the layout or
-    // venue changes, not on every board re-render.
+    // The stands are a few hundred nodes, so only rebuild them when the layout
+    // or venue changes, not on every board re-render.
     const svg = useMemo(() => {
-    const theme = THEMES[stadium.id] ?? THEMES['neutral-ground'];
-    const club = CLUB_COLORS[clubColor ?? ''];
-    const crowdColors = club ? [...theme.crowd, club, club] : theme.crowd;
-    const plaque = label ?? stadium.name;
-    // Skip the drawing for an implausible layout (e.g. the board unstyled
-    // because its stylesheet failed to load): the crowd scales with the area.
-    if (!box || box.w <= 0 || box.w > MAX_SIDE || box.h > MAX_SIDE) return null;
-    return (
-        <svg
-            // Inline positioning (not just classes) so the SVG can never join
-            // the layout it measures, even if the stylesheet fails to load.
-            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-            width={box.w}
-            height={box.h}
-            viewBox={`0 0 ${box.w} ${box.h}`}
-            aria-hidden="true"
-        >
-            <defs>
-                <radialGradient id={`${id}-glow`}>
-                    <stop offset="0" stopColor={GLOW[stadium.id] ?? GLOW['neutral-ground']} stopOpacity="0.75" />
-                    <stop offset="1" stopColor={GLOW[stadium.id] ?? GLOW['neutral-ground']} stopOpacity="0" />
-                </radialGradient>
-                <linearGradient id={`${id}-lava`} x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stopColor="#f97316" />
-                    <stop offset="0.5" stopColor="#fde047" />
-                    <stop offset="1" stopColor="#f97316" />
-                </linearGradient>
-                {/* Banking: each stand darkens toward the pitch, like seats stepping down */}
-                {([['t', 0, 0, 0, 1], ['b', 0, 1, 0, 0], ['l', 0, 0, 1, 0], ['r', 1, 0, 0, 0]] as const).map(([k, x1, y1, x2, y2]) => (
-                    <linearGradient key={k} id={`${id}-bank-${k}`} x1={x1} y1={y1} x2={x2} y2={y2}>
-                        <stop offset="0" stopColor={theme.stand} />
-                        <stop offset="1" stopColor={theme.outer} />
-                    </linearGradient>
-                ))}
-                <clipPath id={`${id}-clip`}>
-                    <rect width={box.w} height={box.h} rx="14" />
-                </clipPath>
-            </defs>
-            <g clipPath={`url(#${id}-clip)`}>
-                <rect width={box.w} height={box.h} fill={theme.outer} />
-                {/* Banked stands: four mitred bands from the outer edge to the pitch */}
-                <polygon points={`0,0 ${box.w},0 ${box.x1},${box.y0} ${box.x0},${box.y0}`} fill={`url(#${id}-bank-t)`} />
-                <polygon points={`0,${box.h} ${box.w},${box.h} ${box.x1},${box.y1} ${box.x0},${box.y1}`} fill={`url(#${id}-bank-b)`} />
-                <polygon points={`0,0 0,${box.h} ${box.x0},${box.y1} ${box.x0},${box.y0}`} fill={`url(#${id}-bank-l)`} />
-                <polygon points={`${box.w},0 ${box.w},${box.h} ${box.x1},${box.y1} ${box.x1},${box.y0}`} fill={`url(#${id}-bank-r)`} />
-                {/* Corner seams between the stands */}
-                {[[0, 0, box.x0, box.y0], [box.w, 0, box.x1, box.y0], [0, box.h, box.x0, box.y1], [box.w, box.h, box.x1, box.y1]].map(([ax, ay, bx, by], i) => (
-                    <line key={`seam${i}`} x1={ax} y1={ay} x2={bx} y2={by} stroke={theme.outer} strokeWidth="3" />
-                ))}
-                {/* Seating tiers */}
-                {[0.25, 0.5, 0.75].map((f) => {
-                    const x0 = box.x0 * f, y0 = box.y0 * f;
-                    const x1 = box.x1 + (box.w - box.x1) * (1 - f), y1 = box.y1 + (box.h - box.y1) * (1 - f);
-                    return <rect key={f} x={x0} y={y0} width={x1 - x0} height={y1 - y0} rx="6" fill="none" stroke={theme.tier} strokeWidth="1.5" />;
-                })}
-                <g opacity="0.9">{crowdDots(box, crowdColors, 9)}</g>
-                <Decor id={id} stadiumId={stadium.id} b={box} club={club ?? '#e7e5e4'} />
-                {/* Pitch-side wall */}
-                <rect x={box.x0 - 2} y={box.y0 - 2} width={box.x1 - box.x0 + 4} height={box.y1 - box.y0 + 4} rx="6" fill="none" stroke={theme.wall} strokeWidth="2.5" opacity="0.85" />
-                {/* Club pennants at the ends */}
-                {club && [box.w * 0.22, box.w * 0.78].flatMap((x) => [box.y0 - 10, box.y1 + 10].map((y) => (
-                    <polygon key={`${x}-${y}`} points={`${x - 6},${y - 4} ${x + 6},${y - 4} ${x},${y + 5}`} fill={club} stroke="#0c0a09" strokeWidth="0.8" />
-                )))}
-            </g>
-            {/* Name plaque over the far stand */}
-            <g>
-                <rect
-                    x={box.w / 2 - Math.min(110, box.w / 2 - 8)}
-                    y={Math.max(2, box.y0 / 2 - 10)}
-                    width={Math.min(220, box.w - 16)}
-                    height="20"
-                    rx="4"
-                    fill="#0c0a09"
-                    opacity="0.85"
-                    stroke={club ?? theme.wall}
-                    strokeWidth="1.2"
-                />
-                <text
-                    x={box.w / 2}
-                    y={Math.max(2, box.y0 / 2 - 10) + 14}
-                    textAnchor="middle"
-                    fontSize="11"
-                    fontWeight="700"
-                    letterSpacing="2"
-                    fill="#fde68a"
-                    style={{ textTransform: 'uppercase' }}
-                >
-                    {plaque}
-                </text>
-            </g>
-        </svg>
-    );
-    }, [box, stadium, clubColor, label, id]);
+        // Skip the drawing for an implausible layout (e.g. the board unstyled
+        // because its stylesheet failed to load).
+        if (!scene || !box || box.w <= 0 || box.w > MAX_SIDE || box.h > MAX_SIDE) return null;
+        const club = CLUB_COLORS[clubColor ?? ''] ?? '#e5e7eb';
+        return (
+            <svg
+                // Inline positioning (not just classes) so the SVG can never join
+                // the layout it measures, even if the stylesheet fails to load.
+                style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', borderRadius: 12 }}
+                width={box.w}
+                height={box.h}
+                viewBox={`0 0 ${box.w} ${box.h}`}
+                aria-hidden="true"
+            >
+                <defs>
+                    <scene.Defs id={id} />
+                    <clipPath id={`${id}-clip`}>
+                        <rect width={box.w} height={box.h} rx="12" />
+                    </clipPath>
+                </defs>
+                <g clipPath={`url(#${id}-clip)`}>
+                    <scene.Body b={box} id={id} club={club} label={label ?? stadium.name} />
+                </g>
+            </svg>
+        );
+    }, [box, scene, stadium, clubColor, label, id]);
 
     return (
         <div
             ref={ref}
-            style={{ position: 'relative', padding: 'clamp(32px, 6vw, 76px) clamp(22px, 4.5vw, 64px)' }}
+            style={{ position: 'relative', padding: scene ? scene.padding : 0 }}
             data-testid={`stadium-surround-${stadium.id}`}
         >
             {svg}
