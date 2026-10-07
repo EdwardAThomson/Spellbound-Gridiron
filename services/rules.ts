@@ -1,8 +1,18 @@
 import {
-  Position, Player, PlayerRole, PlayerStats, TeamSide, TeamData, TerrainType, Weather, MeteorWarning,
+  Position, Player, PlayerRole, PlayerStats, TeamSide, TeamData, TerrainType, Weather, MeteorWarning, SkillId,
   BOARD_WIDTH, BOARD_HEIGHT,
 } from '../types';
 import { ROLE_STATS } from '../constants';
+import {
+  tackleModifiers,
+  passDifficultyModifier,
+  canUseSkill,
+  spendSkill,
+  armorSaveBonus,
+  ignoresTerrain,
+  moveBonus,
+  isSkillId,
+} from './skills';
 
 // Pure, deterministic game-rules logic extracted from App.tsx and gameUtils.ts.
 //
@@ -61,25 +71,40 @@ export interface TackleResult {
   attackRoll: number;
   defendRoll: number;
   log: string;
+  /** The defender after the tackle (only differs when Slippery was spent). */
+  defender: Player;
 }
 
-/** STR + d6 vs STR + d6; attacker wins on a strictly higher total. */
+/**
+ * STR + d6 vs STR + d6; attacker wins on a strictly higher total. When
+ * `players` (everyone on the pitch) is given, skill modifiers apply
+ * (`tackleModifiers`), and a defender's unspent Slippery turns one landed
+ * tackle into a miss.
+ */
 export const resolveTackle = (
   attacker: Player,
   defender: Player,
-  rng: Rng
+  rng: Rng,
+  players?: Player[]
 ): TackleResult => {
-  const attackRoll = rollDie(rng, 6) + attacker.stats.strength;
-  const defendRoll = rollDie(rng, 6) + defender.stats.strength;
-  const success = attackRoll > defendRoll;
-  return {
-    success,
-    attackRoll,
-    defendRoll,
-    log: success
-      ? `${attacker.name} smashed ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!`
-      : `${attacker.name} bounced off ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!`,
-  };
+  const mods = players ? tackleModifiers(attacker, defender, players) : { atk: 0, def: 0, notes: [] };
+  const attackRoll = rollDie(rng, 6) + attacker.stats.strength + mods.atk;
+  const defendRoll = rollDie(rng, 6) + defender.stats.strength + mods.def;
+  let success = attackRoll > defendRoll;
+  let after = defender;
+  let slipped = false;
+  if (success && players && canUseSkill(defender, 'slippery')) {
+    success = false;
+    slipped = true;
+    after = spendSkill(defender, 'slippery');
+  }
+  const skillNote = mods.notes.length ? ` [${mods.notes.join(', ')}]` : '';
+  const log = slipped
+    ? `${defender.name} slips out of ${attacker.name}'s grasp! (Slippery, Roll: ${attackRoll} vs ${defendRoll})${skillNote}`
+    : success
+      ? `${attacker.name} smashed ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!${skillNote}`
+      : `${attacker.name} bounced off ${defender.name} (Roll: ${attackRoll} vs ${defendRoll})!${skillNote}`;
+  return { success, attackRoll, defendRoll, log, defender: after };
 };
 
 export interface PassResult {
@@ -95,13 +120,25 @@ export interface PassResult {
  * (`GAME_RULES` in utils/contextSerializer.ts) and CLAUDE.md. Bad weather
  * (`weatherMod`, from `weatherPassModifier`) raises the difficulty on top of it.
  */
+export interface PassContext {
+  weather: Weather;
+  /** Everyone on the pitch (for the receiver's and nearby enemies' skills). */
+  players: Player[];
+}
+
 export const resolvePass = (
   thrower: Player,
   targetPos: Position,
   rng: Rng,
-  weatherMod: number = 0
+  weatherMod: number = 0,
+  ctx?: PassContext
 ): PassResult => {
-  const difficulty = 2 + manhattanDistance(thrower.position, targetPos) + weatherMod;
+  const distance = manhattanDistance(thrower.position, targetPos);
+  const skillMod = ctx
+    ? passDifficultyModifier(thrower, distance, ctx.weather, weatherMod, getPlayerAtPosition(targetPos, ctx.players), ctx.players)
+    : 0;
+  // Skills can ease a pass but never below the 2 that every throw starts at.
+  const difficulty = Math.max(2, 2 + distance + weatherMod + skillMod);
   const roll = rollDie(rng, 6) + thrower.stats.skill;
   const success = roll >= difficulty;
   return {
@@ -143,29 +180,60 @@ const KING_STEPS: readonly { x: number; y: number }[] = [
 
 const posKey = (p: Position): string => `${p.x},${p.y}`;
 
-/** BFS from `from` up to `maxSteps`, returning each visited tile's parent. */
+interface BfsNode {
+  pos: Position;
+  parent: string | null;
+  depth: number;
+  /** Occupied tiles passed over so far (Leap). */
+  jumps: number;
+}
+
+/**
+ * BFS from `from` up to `maxSteps`, returning each visited state's parent. A
+ * state is a tile plus the number of occupied tiles leapt over to reach it;
+ * with `maxJumps` 0 (the default) blocked tiles are simply impassable.
+ */
 const bfsParents = (
   from: Position,
   maxSteps: number,
-  isBlocked: (pos: Position) => boolean
-): Map<string, { pos: Position; parent: string | null; depth: number }> => {
-  const visited = new Map<string, { pos: Position; parent: string | null; depth: number }>();
-  visited.set(posKey(from), { pos: from, parent: null, depth: 0 });
-  let frontier: Position[] = [from];
+  isBlocked: (pos: Position) => boolean,
+  maxJumps: number = 0
+): Map<string, BfsNode> => {
+  const stateKey = (p: Position, j: number) => `${posKey(p)},${j}`;
+  const visited = new Map<string, BfsNode>();
+  visited.set(stateKey(from, 0), { pos: from, parent: null, depth: 0, jumps: 0 });
+  let frontier: string[] = [stateKey(from, 0)];
   for (let depth = 1; depth <= maxSteps && frontier.length > 0; depth++) {
-    const next: Position[] = [];
-    for (const tile of frontier) {
+    const next: string[] = [];
+    for (const parentKey of frontier) {
+      const node = visited.get(parentKey)!;
       for (const step of KING_STEPS) {
-        const neighbour = { x: tile.x + step.x, y: tile.y + step.y };
-        const key = posKey(neighbour);
-        if (visited.has(key) || !isPositionValid(neighbour) || isBlocked(neighbour)) continue;
-        visited.set(key, { pos: neighbour, parent: posKey(tile), depth });
-        next.push(neighbour);
+        const neighbour = { x: node.pos.x + step.x, y: node.pos.y + step.y };
+        if (!isPositionValid(neighbour)) continue;
+        const blocked = isBlocked(neighbour);
+        // A blocked tile can only be passed over with a jump to spare, and a
+        // leap must land on the very next step (never two blocked in a row).
+        const jumps = node.jumps + (blocked ? 1 : 0);
+        if (blocked && (jumps > maxJumps || isBlocked(node.pos) && node.depth > 0)) continue;
+        const key = stateKey(neighbour, jumps);
+        if (visited.has(key)) continue;
+        visited.set(key, { pos: neighbour, parent: parentKey, depth, jumps });
+        next.push(key);
       }
     }
     frontier = next;
   }
   return visited;
+};
+
+/** The shallowest unblocked arrival at `pos` among all jump counts. */
+const bestArrival = (visited: Map<string, BfsNode>, pos: Position, isBlocked: (p: Position) => boolean): BfsNode | null => {
+  if (isBlocked(pos)) return null;
+  let best: BfsNode | null = null;
+  for (const node of visited.values()) {
+    if (node.depth > 0 && node.pos.x === pos.x && node.pos.y === pos.y && (!best || node.depth < best.depth)) best = node;
+  }
+  return best;
 };
 
 /**
@@ -177,29 +245,38 @@ export const findPath = (
   from: Position,
   to: Position,
   maxSteps: number,
-  isBlocked: (pos: Position) => boolean
+  isBlocked: (pos: Position) => boolean,
+  maxJumps: number = 0
 ): Position[] | null => {
   if (!isPositionValid(to) || isBlocked(to)) return null;
   if (from.x === to.x && from.y === to.y) return null;
-  const visited = bfsParents(from, maxSteps, isBlocked);
-  const goal = visited.get(posKey(to));
+  const visited = bfsParents(from, maxSteps, isBlocked, maxJumps);
+  const goal = bestArrival(visited, to, isBlocked);
   if (!goal) return null;
   const path: Position[] = [];
-  for (let node = goal; node.parent !== null; node = visited.get(node.parent)!) {
+  for (let node: BfsNode = goal; node.parent !== null; node = visited.get(node.parent)!) {
     path.unshift(node.pos);
   }
   return path;
 };
 
-/** Every tile reachable from `from` within `maxSteps` (excluding `from`). */
+/**
+ * Every tile reachable from `from` within `maxSteps` (excluding `from`).
+ * With `maxJumps` > 0 (Leap) a path may pass over that many occupied tiles,
+ * but never end on one.
+ */
 export const reachableTiles = (
   from: Position,
   maxSteps: number,
-  isBlocked: (pos: Position) => boolean
-): Position[] =>
-  Array.from(bfsParents(from, maxSteps, isBlocked).values())
-    .filter((node) => node.depth > 0)
-    .map((node) => node.pos);
+  isBlocked: (pos: Position) => boolean,
+  maxJumps: number = 0
+): Position[] => {
+  const seen = new Map<string, Position>();
+  for (const node of bfsParents(from, maxSteps, isBlocked, maxJumps).values()) {
+    if (node.depth > 0 && !isBlocked(node.pos)) seen.set(posKey(node.pos), node.pos);
+  }
+  return Array.from(seen.values());
+};
 
 // --- Kickoff formation -----------------------------------------------------
 //
@@ -355,6 +432,14 @@ export const weatherMovePenalty = (weather: Weather): number =>
 export const effectiveMove = (baseMove: number, weather: Weather): number =>
   Math.max(1, baseMove - weatherMovePenalty(weather));
 
+/**
+ * A player's Move for the turn that is starting: base Move plus skills (Fleet,
+ * Charge when starting without the ball), less the weather and any one-turn
+ * Hex penalty, never below 1.
+ */
+export const turnMove = (player: Player, weather: Weather, startsWithBall: boolean): number =>
+  Math.max(1, player.stats.move + moveBonus(player, startsWithBall) - weatherMovePenalty(weather) - (player.movePenalty ?? 0));
+
 /** True when `pos` is one of the seeded lava hazard tiles. */
 export const isHazard = (pos: Position, hazards: Position[]): boolean =>
   hazards.some((h) => h.x === pos.x && h.y === pos.y);
@@ -397,8 +482,12 @@ export const resolveTerrainStep = (
   to: Position,
   hazards: Position[],
   isBlocked: (pos: Position) => boolean,
-  rng: Rng
+  rng: Rng,
+  mover?: Player
 ): StepEffect => {
+  // Mudborn, Forge-born and Ice Skater walk their home terrain like grass.
+  if (ignoresTerrain(mover, terrain)) return { position: to, knockedDown: false, log: null };
+
   if (terrain === TerrainType.LAVA && isHazard(to, hazards)) {
     return {
       position: to,
@@ -457,7 +546,7 @@ export const resolveKnockdown = (
   _source: KnockdownSource,
   rng: Rng
 ): KnockdownResult => {
-  const roll = rollDie(rng, 6) + player.stats.armor;
+  const roll = rollDie(rng, 6) + player.stats.armor + armorSaveBonus(player);
   const downed = roll < ARMOR_SAVE_TARGET;
   return {
     downed,
@@ -643,8 +732,11 @@ export const advanceMeteor = (
 // These functions are pure (no storage, no rng); `services/roster.ts` wraps
 // them in a versioned localStorage slot, mirroring the save/load system.
 
-/** Bump when the persisted roster shape changes; old roster blobs are rejected. */
-export const ROSTER_VERSION = 1;
+/**
+ * Bump when the persisted roster shape changes. v2 added learned skills; a v1
+ * roster is still accepted and migrated (its players simply know no skills).
+ */
+export const ROSTER_VERSION = 2;
 
 /** One player's durable progression within a roster slot. */
 export interface RosterPlayer {
@@ -654,6 +746,7 @@ export interface RosterPlayer {
   xp: number;
   level: number;
   stats: PlayerStats;
+  skills: SkillId[];
 }
 
 /** A named team slot: its identity plus every player's carried progression. */
@@ -676,6 +769,7 @@ export const extractRoster = (team: TeamData): Roster => ({
     xp: p.xp,
     level: p.level,
     stats: { ...p.stats },
+    skills: [...(p.skills ?? [])],
   })),
 });
 
@@ -691,7 +785,9 @@ const isRosterPlayer = (v: any): v is RosterPlayer =>
       typeof v.stats.move === 'number' &&
       typeof v.stats.strength === 'number' &&
       typeof v.stats.skill === 'number' &&
-      typeof v.stats.armor === 'number'
+      typeof v.stats.armor === 'number' &&
+      // v1 rosters predate skills; a present list must hold known skill ids.
+      (v.skills === undefined || (Array.isArray(v.skills) && v.skills.every(isSkillId)))
   );
 
 /** Structural guard so a corrupt/hand-edited roster degrades to "no roster". */
@@ -722,5 +818,6 @@ export const applyRoster = (roster: Roster, freshPlayers: Player[]): Player[] =>
       xp: saved.xp,
       level: saved.level,
       stats: { ...saved.stats },
+      skills: [...(saved.skills ?? [])],
     };
   });

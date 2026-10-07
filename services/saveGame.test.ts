@@ -46,6 +46,10 @@ const mkPlayer = (over: Partial<Player> = {}): Player => ({
   mana: 0,
   xp: 6,
   level: 2,
+  skills: [],
+  spentSkills: [],
+  movedThisTurn: 0,
+  movePenalty: 0,
   ...over,
 });
 
@@ -183,6 +187,18 @@ describe('graceful handling of missing / corrupt saves', () => {
     const r = deserializeSave(bad);
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/version/i);
+  });
+
+  it('migrates a v3 (pre-skills) save, defaulting each player\'s skill state', () => {
+    const state = mkState();
+    const strip = (t: any) => ({
+      ...t,
+      players: t.players.map(({ skills, spentSkills, movedThisTurn, movePenalty, ...rest }: any) => rest),
+    });
+    const v3 = { ...state, homeTeam: strip(state.homeTeam), awayTeam: strip(state.awayTeam) };
+    const r = deserializeSave(JSON.stringify({ version: 3, hasGameStarted: true, gameState: v3 }));
+    expect(r.ok).toBe(true);
+    expect(r.gameState).toEqual(state);
   });
 
   it('rejects a structurally broken snapshot', () => {
