@@ -9,7 +9,9 @@ import { Fixture, fixtureSeed } from './campaign';
 // rng-injected helpers; `components/StadiumArt.tsx` draws each venue.
 //
 // Venues are keyed by campaign team id, so the campaign save shape is untouched:
-// a club's stadium is looked up, never stored.
+// a club's stadium is looked up, never stored. Adding a club's venue is one
+// entry in STADIUMS plus a scene in StadiumArt's SCENES (a venue without a
+// scene draws as the neutral ground). Pitches may repeat across clubs.
 
 /** Relative weights of each weather at a venue. Zero means it never happens there. */
 export type Climate = Record<Weather, number>;

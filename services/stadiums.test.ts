@@ -24,13 +24,12 @@ describe('stadium data', () => {
     }
   });
 
-  it('has unique ids, clubs and pitches', () => {
+  // Pitches may repeat: there are only four terrains, so a fifth club shares one.
+  it('has unique ids and one stadium per club', () => {
     const ids = STADIUMS.map((s) => s.id);
     const clubs = STADIUMS.map((s) => s.clubId);
-    const terrains = STADIUMS.map((s) => s.terrain);
     expect(new Set(ids).size).toBe(STADIUMS.length);
     expect(new Set(clubs).size).toBe(STADIUMS.length);
-    expect(new Set(terrains).size).toBe(STADIUMS.length);
   });
 
   it('matches each club to its race pitch', () => {
