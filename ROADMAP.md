@@ -19,7 +19,7 @@ All six resolved in Task 1 (2026-08-10).
   - Mud (Orc Pits): each step risks a slip that drops the unit prone (Stunned) and spills the ball.
   - Lava (Demon Forge): seeded hazard tiles (⚠️ telegraph) knock down anyone stepping on them.
   - Ice (Frozen Wastes): a step slides one extra tile in the travel direction when that tile is open.
-- [ ] **Additional pitch types** beyond the four currently stubbed (e.g. arena variants, themed home pitches per race).
+- [ ] **Additional pitch types** beyond the four existing ones (e.g. arena variants, themed home pitches per race).
 - [x] **Weather effects.** Wired in Task 4. Rain (+1) and Blizzard (+2) raise pass difficulty (`weatherPassModifier`); Meteor Shower telegraphs a tile one round (☄️) then strikes it, knocking down whoever stands there and spilling the ball. Weather is chosen on the start screen and mirrored across `GAME_RULES`, the rulebook, and the README. (2026-08-10)
 
 ## Player development
@@ -31,10 +31,19 @@ All six resolved in Task 1 (2026-08-10).
 
 ## Campaign mode
 
-- [ ] **League mode.** Multi-match season with standings, scheduled fixtures, and a league table.
+- [x] **League mode.** Done (2026-08-10) as Campaign on the main menu: a 4-club double round-robin season (12 fixtures, 3-1-0 table) in `services/campaign.ts`. You play your own fixtures against the computer opponent; computer-vs-computer fixtures are simulated instantly with seeded, reproducible results. The season saves to localStorage.
+- [ ] **Per-club campaign rosters.** Campaign matches currently reuse the same two global roster slots as Quick Play, so each opponent fields the previous opponent's players and a Quick Play rematch overwrites the campaign squad's XP. Each club should carry its own roster inside the campaign save.
 - [ ] **Tournament mode.** Bracketed knockout play.
 - [x] **Persistent rosters.** Done (2026-08-10): finished rosters (XP, levels, stat bumps) persist to localStorage (`services/roster.ts`) and the post-game Rematch button fields the same veterans; corrupt or missing data falls back to fresh teams.
 - [ ] **Player trading / transfers.** Move players between teams (campaign-only; needs persistence first).
+
+## Modes & controls
+
+- [x] **Main menu.** Quick Play / Campaign / Tutorial / Settings, reachable again from inside a match and from the game-over screen. (2026-08-10)
+- [x] **Computer opponent.** Rules-based, LLM-free turn planner (`services/opponent.ts`); Quick Play offers Hotseat or Computer. (2026-08-10)
+- [x] **Tutorial and Help.** A guided coachmark tutorial (`services/tutorial.ts`) and an in-game Help with Controls and How-to-play. (2026-08-10)
+- [x] **Click-to-move.** Clicking a reachable tile walks the unit along the shortest path, with animated tokens. (2026-08-10)
+- [x] **Deterministic commentary.** Match commentary is drawn from event pools (`services/commentary.ts`) instead of an LLM. (2026-08-11)
 
 ## World
 
@@ -43,4 +52,4 @@ All six resolved in Task 1 (2026-08-10).
 ## Notes
 
 - We are not trying to clone Blood Bowl. Where we borrow a concept (turnovers, dodge rolls, skill trees), we should look for a twist that fits the magic / fantasy-football tone of Spellbound Gridiron.
-- Order within a section roughly reflects dependency, not priority. Terrain/weather are the most self-contained next steps because the data model already exists.
+- Order within a section roughly reflects dependency, not priority. Per-club campaign rosters unblock injuries and transfers, and skill unlocks build on the between-games level-ups.
