@@ -29,7 +29,8 @@ import {
 } from './services/campaign';
 import { planOpponentTurn, OpponentAction } from './services/opponent';
 import { seededRng } from './services/rules';
-import { fixtureVenue } from './services/stadiums';
+import { fixtureVenue, homeStadium, stadiumForTerrain } from './services/stadiums';
+import StadiumSurround from './components/StadiumSurround';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -1329,6 +1330,11 @@ export default function App() {
 
     const selectedPlayer = getSelectedPlayer();
     const terrainInfo = TERRAIN_CONFIG[gameState.terrain];
+    // The stadium drawn around the board: the home club's ground in a campaign
+    // fixture, otherwise the club venue built on the chosen pitch.
+    const matchHomeClub = campaign && campaignFixture ? campaign.teams.find(t => t.id === campaignFixture.homeId) : undefined;
+    const matchStadium = campaignFixture ? homeStadium(campaignFixture.homeId) : stadiumForTerrain(gameState.terrain);
+    const matchStadiumLabel = campaignFixture ? matchStadium.name : terrainInfo.name;
 
     return (
         <div className="min-h-screen bg-stone-900 text-gray-100 flex flex-col md:flex-row overflow-hidden">
@@ -1545,6 +1551,7 @@ export default function App() {
                 {/* CENTER: BOARD */}
                 <div className="flex-1 relative overflow-auto flex items-center justify-center bg-stone-900 p-4 md:p-8">
 
+                    <StadiumSurround stadium={matchStadium} clubColor={matchHomeClub?.color} label={matchStadiumLabel}>
                     {/* Field Background Wrapper */}
                     <div className={`relative rounded-lg shadow-2xl overflow-hidden border-4 border-stone-800 bg-gradient-to-br ${terrainInfo.color}`}>
 
@@ -1599,6 +1606,7 @@ export default function App() {
                             {renderTokenLayer()}
                         </div>
                     </div>
+                    </StadiumSurround>
                 </div>
 
                 {/* RIGHT PANEL: LOGS & CHAT */}

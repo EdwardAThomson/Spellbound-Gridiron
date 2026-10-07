@@ -8,7 +8,7 @@ import { Stadium } from '../services/stadiums';
 // colour on its pennants. Decorative only; all venue data lives in
 // services/stadiums.ts.
 
-const CLUB_COLORS: Record<string, string> = {
+export const CLUB_COLORS: Record<string, string> = {
     red: '#dc2626',
     blue: '#3b82f6',
     gold: '#eab308',
@@ -16,7 +16,7 @@ const CLUB_COLORS: Record<string, string> = {
 };
 
 // Small deterministic jitter so crowds and stars look scattered, not gridded.
-const jitter = (i: number, salt: number) => {
+export const jitter = (i: number, salt: number) => {
     const s = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
     return s - Math.floor(s);
 };

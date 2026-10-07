@@ -56,6 +56,8 @@ Campaign runs a **4-team double round-robin**: every team meets every other team
     -   **The Gutterpit** (Orc Bashers): Mud; usually Rain.
     -   **Anvilhold Forge-Ring** (Dwarf Anvils): Lava; often a Meteor Shower.
     -   **Barrowfrost Necropolis** (Undead Legion): Ice; usually a Blizzard.
+
+    The board is drawn inside the venue: stands and a crowd ring the pitch, with each ground's own set-dressing (Moonglade's trees, the Gutterpit's palisade, Anvilhold's lava moat, Barrowfrost's ice spires and graves). Quick Play and the Tutorial use the venue built on the chosen pitch.
 -   **AI-vs-AI fixtures** resolve instantly through a pure, non-LLM simulator that derives a score from each team's overall quality: no keys, no network. Each fixture's randomness comes from a seeded PRNG keyed on the season number and the fixture's identity (round and the two teams), not the wall clock, so an AI-vs-AI season is genuinely reproducible: it replays to exactly the same results every time.
 -   When every fixture is played, a **season-complete** screen crowns the champion and offers a **new season**: rosters carry over (via the persistent roster system), and the standings reset.
 -   The campaign persists under its own **versioned localStorage** slot, separate from the single-match save and the roster slots. It resumes from the Campaign menu entry, survives a reload mid-season, and degrades gracefully (to "no usable campaign") on corrupt or missing data rather than loading a half-broken season.

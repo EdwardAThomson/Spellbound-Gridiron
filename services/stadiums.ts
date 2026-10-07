@@ -78,6 +78,14 @@ export const NEUTRAL_STADIUM: Stadium = {
 export const homeStadium = (clubId: string): Stadium =>
   STADIUMS.find((s) => s.clubId === clubId) ?? NEUTRAL_STADIUM;
 
+/**
+ * The stadium whose pitch is the given terrain, for matches outside the
+ * campaign (Quick Play, Tutorial) so the board is still framed by a venue.
+ * Prefers the first club stadium on that terrain; the neutral ground otherwise.
+ */
+export const stadiumForTerrain = (terrain: TerrainType): Stadium =>
+  STADIUMS.find((s) => s.terrain === terrain) ?? NEUTRAL_STADIUM;
+
 const WEATHER_ORDER: Weather[] = [Weather.CLEAR, Weather.RAIN, Weather.BLIZZARD, Weather.METEOR_SHOWER];
 
 /**

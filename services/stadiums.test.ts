@@ -3,6 +3,7 @@ import {
   STADIUMS,
   NEUTRAL_STADIUM,
   homeStadium,
+  stadiumForTerrain,
   rollStadiumWeather,
   fixtureVenue,
   Stadium,
@@ -131,5 +132,14 @@ describe('fixtureVenue', () => {
         expect(stadium.climate[weather]).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('stadiumForTerrain', () => {
+  it('frames each pitch with the club stadium built on it', () => {
+    expect(stadiumForTerrain(TerrainType.GRASS).id).toBe('moonglade-bowl');
+    expect(stadiumForTerrain(TerrainType.MUD).id).toBe('the-gutterpit');
+    expect(stadiumForTerrain(TerrainType.LAVA).id).toBe('anvilhold-forge');
+    expect(stadiumForTerrain(TerrainType.ICE).id).toBe('barrowfrost');
   });
 });

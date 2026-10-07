@@ -57,6 +57,7 @@ test('a Campaign player-fixture is played against the Computer', async ({ page }
 
   // The match is played at the stadium the hub announced.
   await expect(page.getByTestId('match-venue')).toContainText(venueName);
+  await expect(page.locator('[data-testid^="stadium-surround-"]')).toBeVisible();
 
   // In the live campaign match, end the player's turn and let the Computer play.
   await expect(page.getByText(/turn 1/i)).toBeVisible();
