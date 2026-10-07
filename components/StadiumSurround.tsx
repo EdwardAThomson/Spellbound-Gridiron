@@ -85,237 +85,228 @@ const leafFringe = (x0: number, x1: number, y: number, depth: number) => {
     return d + ` L${x1},${y - depth * 2} L${x0},${y - depth * 2} Z`;
 };
 
+/** Vertical twin of leafFringe: scallops along x = `x`, pointing in +x for positive depth. */
+const leafFringeV = (y0: number, y1: number, x: number, depth: number) => {
+    const n = Math.max(2, Math.round((y1 - y0) / 22));
+    const step = (y1 - y0) / n;
+    let d = `M${x - depth},${y0}`;
+    for (let i = 0; i < n; i++) {
+        const a = y0 + i * step;
+        d += ` Q${x + depth * (0.55 + jitter(i, 33) * 0.5)},${a + step / 2} ${x - depth * 0.15},${a + step}`;
+    }
+    return d + ` L${x - depth * 2},${y1} L${x - depth * 2},${y0} Z`;
+};
+
+// The bowl is one structure built from concentric rectangular rings. Ring 0 is
+// the pitch-side boards; rings 1..3 are the backs of the three seating tiers;
+// beyond ring 3 is the roof, out to the frame. Each side's stand is the
+// quadrilateral between the inner and outer ring on that side, so the four
+// stands meet on mitred diagonals at the corners and nothing overlaps. The
+// camera is above the near (bottom) end: the far stand shows its riser faces,
+// the near stand shows treads and the backs of heads, and everything nearer the
+// camera is drawn larger.
 const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string }> = ({ b, id, club, label }) => {
     const { w, h, x0, y0, x1, y1 } = b;
     const midX = (x0 + x1) / 2;
-    const sideW = x0;                     // width of each side stand
-    const apron = 10;                     // grass between the pitch and the hoardings
-    const hoardH = 9;                     // pitch-side boards
+    const apron = 10, hoard = 8;
+    // Ring 0: the outside of the pitch-side boards.
+    const L0 = x0 - apron - hoard, R0 = x1 + apron + hoard, T0 = y0 - apron - hoard, B0 = y1 + apron + hoard;
+    // Space on each side, split into sky (top only), stand and roof.
+    const sky = T0 * 0.24, roofTop = T0 * 0.12, standTop = T0 - sky - roofTop;
+    const roofSide = L0 * 0.18, standSide = L0 - roofSide;
+    const roofBot = (h - B0) * 0.22, standBot = h - B0 - roofBot;
+    // Tier depths as fractions of each side's stand. Tiers nearer the camera are deeper.
+    const ft = [0.4, 0.72, 1], fs = [0.34, 0.67, 1], fb = [0.28, 0.6, 1];
+    const L = [L0, ...fs.map((f) => L0 - standSide * f)];
+    const R = [R0, ...fs.map((f) => R0 + standSide * f)];
+    const T = [T0, ...ft.map((f) => T0 - standTop * f)];
+    const B = [B0, ...fb.map((f) => B0 + standBot * f)];
+    const L3 = L[3], R3 = R[3], T3 = T[3], B3 = B[3];
 
-    // Far stand: from the roof line down to the hoardings above the top endzone.
-    const farTop = y0 * 0.34;
-    const farBottom = y0 - apron - hoardH;
-    const farRows = 5;
-    const farRowH = (farBottom - farTop) / farRows;
-    const farLeft = x0 - sideW * 0.55;
-    const farRight = x1 + sideW * 0.55;
+    const farPoly = `${L3},${T3} ${R3},${T3} ${R0},${T0} ${L0},${T0}`;
+    const nearPoly = `${L0},${B0} ${R0},${B0} ${R3},${B3} ${L3},${B3}`;
+    const leftPoly = `${L3},${T3} ${L0},${T0} ${L0},${B0} ${L3},${B3}`;
+    const rightPoly = `${R3},${T3} ${R0},${T0} ${R0},${B0} ${R3},${B3}`;
 
-    // Side stands: rows run alongside the touchline and step up and outward.
-    const sideRows = 3;
-    const sideRowW = (sideW - apron - hoardH) / sideRows;
-    const sideRise = farRowH * 1.1;       // each row further out starts higher, so the tiers visibly step up
-
-    const els: React.ReactNode[] = [];
     let fanIdx = 0;
 
-    // Far stand rows, back (top) to front (bottom) so nearer rows overlap.
-    for (let r = 0; r < farRows; r++) {
-        const top = farTop + r * farRowH;
-        els.push(<rect key={`fr${r}`} x={farLeft} y={top} width={farRight - farLeft} height={farRowH * 0.38} fill={MG.riser} />);
-        els.push(<rect key={`ft${r}`} x={farLeft} y={top + farRowH * 0.38} width={farRight - farLeft} height={farRowH * 0.62} fill={MG.stone} />);
-        const seatY = top + farRowH * 0.38;
-        for (let x = farLeft + 9; x < farRight - 8; x += 14) {
-            const aisle = Math.abs(((x - midX) % 96 + 96) % 96 - 48) > 42;
-            if (aisle) continue;
-            els.push(<rect key={`fs${r}-${x}`} x={x - 5.5} y={seatY + 2} width="11" height={farRowH * 0.4} rx="2" fill={r % 2 ? MG.seat : MG.seatDark} />);
+    // --- Far stand: rows climb away from the pitch; we see each row's riser face.
+    const far: React.ReactNode[] = [];
+    const farRowH = Math.min(22, Math.max(14, standTop / 7));
+    const farRows = Math.ceil(standTop / farRowH);
+    for (let i = 0; i < farRows; i++) {
+        const yBot = T0 - i * farRowH, yTop = yBot - farRowH;
+        const s = 0.8 + 0.35 * (1 - i / farRows);
+        far.push(<rect key={`r${i}`} x={L3} y={yTop + farRowH * 0.5} width={R3 - L3} height={farRowH * 0.5} fill={MG.riser} />);
+        far.push(<rect key={`t${i}`} x={L3} y={yTop} width={R3 - L3} height={farRowH * 0.5} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
+        const step = 12 * s;
+        for (let x = L3 + step; x < R3 - step / 2; x += step) {
+            const dx = ((x - midX) % 110 + 110) % 110;
+            if (Math.abs(dx - 55) > 49) continue;                       // aisle
+            if (Math.abs(x - midX) < 40 && i < 4) continue;               // royal box
+            far.push(<rect key={`s${i}-${x}`} x={x - 4 * s} y={yTop + farRowH * 0.06} width={8 * s} height={farRowH * 0.42} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
             fanIdx++;
-            if (jitter(fanIdx, 5) < 0.6 && !(r < 3 && Math.abs(x - midX) < 44)) {
-                els.push(<Fan key={`ff${r}-${x}`} x={x} y={seatY + farRowH * 0.52} s={Math.min(1.5, farRowH / 16)} i={fanIdx} club={club} />);
-            }
+            if (jitter(fanIdx, 5) < 0.62) far.push(<Fan key={`f${i}-${x}`} x={x} y={yTop + farRowH * 0.5} s={s} i={fanIdx} club={club} />);
         }
     }
     // Aisle stairs down the far stand.
-    for (let k = -6; k <= 6; k++) {
-        const ax = midX + k * 96 + 48;
-        if (ax < farLeft + 6 || ax > farRight - 6) continue;
-        els.push(<rect key={`fa${k}`} x={ax - 5} y={farTop} width="10" height={farBottom - farTop} fill={MG.stoneShade} />);
-        for (let r = 0; r < farRows * 2; r++) {
-            els.push(<line key={`fas${k}-${r}`} x1={ax - 5} x2={ax + 5} y1={farTop + (r + 1) * farRowH / 2} y2={farTop + (r + 1) * farRowH / 2} stroke={MG.stoneDark} strokeWidth="1" />);
-        }
+    for (let k = -8; k <= 8; k++) {
+        const ax = midX + k * 110 + 55;
+        if (ax < L3 || ax > R3) continue;
+        far.push(<rect key={`a${k}`} x={ax - 6} y={T3} width="12" height={T0 - T3} fill={MG.stoneShade} />);
+        for (let yy = T0 - farRowH / 2; yy > T3; yy -= farRowH / 2) far.push(<line key={`al${k}-${yy}`} x1={ax - 6} x2={ax + 6} y1={yy} y2={yy} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
     }
 
-    // Side stands (left and right are mirror images).
+    // --- Side stands: rows run along the touchline and step up and outward.
+    const sideRowW = Math.min(24, Math.max(14, standSide / 4));
     const side = (dir: -1 | 1) => {
         const parts: React.ReactNode[] = [];
-        const inner = dir < 0 ? x0 - apron - hoardH : x1 + apron + hoardH;
-        for (let r = sideRows - 1; r >= 0; r--) {
-            const near = inner + dir * r * sideRowW;
-            const far = inner + dir * (r + 1) * sideRowW;
-            const top = y0 - apron - r * sideRise;
-            const bottom = h;
-            const xa = Math.min(near, far), xb = Math.max(near, far);
-            // Tread and riser of the row (the riser faces the pitch).
-            parts.push(<rect key={`st${dir}${r}`} x={xa} y={top} width={xb - xa} height={bottom - top} fill={`url(#${id}-tread${dir < 0 ? 'L' : 'R'})`} />);
-            // The riser faces the pitch and the tread lights up outward, so each tier reads as a step.
-            const riserX = dir < 0 ? xb - sideRowW * 0.3 : xa;
-            parts.push(<rect key={`sr${dir}${r}`} x={riserX} y={top} width={sideRowW * 0.3} height={bottom - top} fill={MG.riser} />);
-            parts.push(<rect key={`sh${dir}${r}`} x={dir < 0 ? xa : xb - 2} y={top} width="2" height={bottom - top} fill="#e8eee4" opacity="0.7" />);
-            parts.push(<rect key={`sc${dir}${r}`} x={xa} y={top} width={xb - xa} height="4" fill={MG.stoneDark} />);
-            const s = Math.min(1.4, sideRowW / 18);
-            for (let y = top + 14; y < bottom - 8; y += 15) {
-                const aisle = Math.abs(((y - y0) % 150 + 150) % 150 - 75) > 66;
-                if (aisle) {
-                    parts.push(<rect key={`sa${dir}${r}-${y}`} x={xa} y={y - 6} width={xb - xa} height="12" fill={MG.stoneShade} />);
-                    continue;
-                }
-                const sx = (xa + xb) / 2 - dir * sideRowW * 0.1;
-                parts.push(<rect key={`ss${dir}${r}-${y}`} x={sx - sideRowW * 0.24} y={y - 5} width={sideRowW * 0.48} height="11" rx="2" fill={r % 2 ? MG.seat : MG.seatDark} />);
+        const rows = Math.ceil(standSide / sideRowW);
+        for (let i = 0; i < rows; i++) {
+            const xIn = dir < 0 ? L0 - i * sideRowW : R0 + i * sideRowW;
+            const xOut = xIn + dir * sideRowW;
+            const xa = Math.min(xIn, xOut), xb = Math.max(xIn, xOut);
+            parts.push(<rect key={`t${i}`} x={xa} y={T3} width={sideRowW} height={B3 - T3} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
+            // The riser faces the pitch.
+            parts.push(<rect key={`r${i}`} x={dir < 0 ? xb - sideRowW * 0.3 : xa} y={T3} width={sideRowW * 0.3} height={B3 - T3} fill={MG.riser} />);
+            const sx = dir < 0 ? xa + sideRowW * 0.38 : xb - sideRowW * 0.38;
+            for (let y = T0 + 10; y < B0; y += 13) {
+                const s = 0.85 + 0.6 * ((y - T0) / (B0 - T0));           // nearer rows (lower) are bigger
+                const dy = ((y - T0) % 130 + 130) % 130;
+                if (Math.abs(dy - 65) > 58) continue;                      // aisle
+                parts.push(<rect key={`s${i}-${y}`} x={sx - sideRowW * 0.22} y={y - 4.5 * s} width={sideRowW * 0.44} height={9 * s} rx={1.5 * s} fill={i % 2 ? MG.seat : MG.seatDark} />);
                 fanIdx++;
-                if (jitter(fanIdx, 6) < 0.55) parts.push(<Fan key={`sf${dir}${r}-${y}`} x={sx} y={y + 4} s={s} i={fanIdx} club={club} />);
+                if (jitter(fanIdx, 6) < 0.6) parts.push(<Fan key={`f${i}-${y}`} x={sx} y={y + 3 * s} s={s * 0.9} i={fanIdx} club={club} />);
             }
         }
-        // Back wall of the side stand, with slender pillars holding its canopy.
-        const wallX = dir < 0 ? 0 : w;
-        const backEdge = inner + dir * sideRows * sideRowW;
-        parts.push(<rect key={`sw${dir}`} x={Math.min(wallX, backEdge)} y={0} width={Math.abs(wallX - backEdge)} height={h} fill={MG.stoneDark} />);
-        // A leaf canopy over the back of the stand, on slender silver pillars.
-        const canopyW = sideRowW * 0.9;
-        const cx0 = dir < 0 ? backEdge - 2 : backEdge - canopyW + 2;
-        parts.push(<rect key={`sk${dir}`} x={cx0} y={0} width={canopyW} height={h} fill={MG.leafDark} />);
-        parts.push(
-            <path
-                key={`sf${dir}`}
-                d={leafFringe(0, h, 0, 6)}
-                fill={MG.leaf}
-                transform={dir < 0 ? `translate(${cx0 + canopyW + 6} 0) rotate(90)` : `translate(${cx0 - 6} ${h}) rotate(-90)`}
-            />
-        );
-        for (let y = y0 + 40; y < y1; y += 110) {
-            parts.push(<rect key={`sp${dir}${y}`} x={dir < 0 ? cx0 + canopyW + 2 : cx0 - 5} y={y} width="3" height="34" fill={MG.stone} />);
-            parts.push(<circle key={`sl${dir}${y}`} cx={dir < 0 ? cx0 + canopyW + 3.5 : cx0 - 3.5} cy={y} r="10" fill={`url(#${id}-glow)`} />);
+        // Aisle stairs across the side stand.
+        for (let k = 0; k < 12; k++) {
+            const ay = T0 + k * 130 + 65;
+            if (ay > B0) break;
+            const xa = dir < 0 ? L3 : R0, xb = dir < 0 ? L0 : R3;
+            parts.push(<rect key={`a${k}`} x={xa} y={ay - 7} width={xb - xa} height="14" fill={MG.stoneShade} />);
+            for (let xx = xa + sideRowW / 2; xx < xb; xx += sideRowW / 2) parts.push(<line key={`al${k}-${xx}`} x1={xx} x2={xx} y1={ay - 7} y2={ay + 7} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
         }
         return parts;
     };
 
+    // --- Near stand: seen from above and behind, rows step down to the pitch.
+    const near: React.ReactNode[] = [];
+    {
+        let y = B0, i = 0, rowH = Math.min(26, Math.max(16, standBot / 4.5));
+        while (y < B3) {
+            const s = 1.1 + 0.25 * i;
+            near.push(<rect key={`t${i}`} x={L3} y={y} width={R3 - L3} height={rowH} fill={i % 2 ? MG.stone : '#bfc9b8'} />);
+            near.push(<rect key={`l${i}`} x={L3} y={y} width={R3 - L3} height="2" fill={MG.stoneDark} opacity="0.6" />);
+            const step = 12 * s;
+            for (let x = L3 + step; x < R3 - step / 2; x += step) {
+                const dx = ((x - midX) % 120 + 120) % 120;
+                if (Math.abs(dx - 60) > 54) continue;
+                near.push(<rect key={`s${i}-${x}`} x={x - 4.6 * s} y={y + rowH * 0.38} width={9.2 * s} height={rowH * 0.4} rx={2 * s} fill={i % 2 ? MG.seatDark : MG.seat} />);
+                fanIdx++;
+                if (jitter(fanIdx, 7) < 0.62) near.push(<Fan key={`f${i}-${x}`} x={x} y={y + rowH * 0.5} s={s} i={fanIdx} club={club} back />);
+            }
+            y += rowH; rowH *= 1.15; i++;
+        }
+        for (let k = -8; k <= 8; k++) {
+            const ax = midX + k * 120 + 60;
+            if (ax < L3 || ax > R3) continue;
+            near.push(<rect key={`a${k}`} x={ax - 7} y={B0} width="14" height={B3 - B0} fill={MG.stoneShade} />);
+            for (let yy = B0 + 8; yy < B3; yy += 9) near.push(<line key={`al${k}-${yy}`} x1={ax - 7} x2={ax + 7} y1={yy} y2={yy} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
+        }
+    }
+
+    const lanterns: React.ReactNode[] = [];
+    // Floodlight lanterns at the four roof corners, on the mitre lines, plus small ones along the roof edges.
+    const corner = (x: number, y: number, big: boolean) => (
+        <g key={`c${x}-${y}`}>
+            <circle cx={x} cy={y} r={big ? 26 : 11} fill={`url(#${id}-glow)`} />
+            <path d={`M${x - 4},${y + 4} L${x + 4},${y + 4} L${x + 3},${y - 5} L${x - 3},${y - 5} Z`} fill={MG.lantern} stroke={MG.gold} strokeWidth="0.9" />
+        </g>
+    );
+    const roofMidX = (L3 + 0) / 2, roofMidR = (R3 + w) / 2;
+    for (let yy = T3 + 90; yy < B3 - 40; yy += 170) lanterns.push(corner(roofMidX, yy, false), corner(roofMidR, yy, false));
+    for (let xx = L3 + 90; xx < R3 - 40; xx += 170) lanterns.push(corner(xx, (B3 + h) / 2, false));
+
     return (
         <g>
-            {/* Night sky over the far stand, with the moon and stars */}
+            {/* Sky, moon, stars and the forest horizon above the far roof */}
             <rect width={w} height={h} fill={MG.stoneDark} />
-            <rect width={w} height={farTop + 30} fill={`url(#${id}-sky)`} />
+            <rect width={w} height={sky + 4} fill={`url(#${id}-sky)`} />
             {Array.from({ length: 28 }, (_, i) => (
-                <circle key={`st${i}`} cx={jitter(i, 1) * w} cy={jitter(i, 2) * farTop * 0.55} r={0.5 + jitter(i, 3) * 0.9} fill="#e0f2fe" opacity={0.45 + jitter(i, 4) * 0.5} />
+                <circle key={`st${i}`} cx={jitter(i, 1) * w} cy={jitter(i, 2) * sky * 0.6} r={0.5 + jitter(i, 3) * 0.9} fill="#e0f2fe" opacity={0.45 + jitter(i, 4) * 0.5} />
             ))}
-            <circle cx={w * 0.8} cy={farTop * 0.22} r="11" fill="#f1f5f9" />
-            <circle cx={w * 0.8 + 5} cy={farTop * 0.22 - 4} r="10" fill={MG.skyTop} />
-            {/* The forest the bowl is carved from, on the horizon */}
+            <circle cx={w * 0.8} cy={sky * 0.3} r="11" fill="#f1f5f9" />
+            <circle cx={w * 0.8 + 5} cy={sky * 0.3 - 4} r="10" fill={MG.skyTop} />
             {Array.from({ length: Math.ceil(w / 34) + 1 }, (_, i) => (
-                <ellipse key={`tf${i}`} cx={i * 34} cy={farTop * 0.62} rx={26} ry={16 + jitter(i, 9) * 10} fill={MG.treeFar} />
+                <ellipse key={`tf${i}`} cx={i * 34} cy={sky * 0.8} rx={26} ry={16 + jitter(i, 9) * 10} fill={MG.treeFar} />
             ))}
             {Array.from({ length: Math.ceil(w / 46) + 1 }, (_, i) => (
-                <ellipse key={`tn${i}`} cx={i * 46 + 20} cy={farTop * 0.8} rx={32} ry={18 + jitter(i, 10) * 8} fill={MG.treeNear} />
+                <ellipse key={`tn${i}`} cx={i * 46 + 20} cy={sky * 0.98} rx={32} ry={18 + jitter(i, 10) * 8} fill={MG.treeNear} />
             ))}
 
-            {/* Side stands first (they sit behind the far stand's ends) */}
-            {side(-1)}
-            {side(1)}
+            {/* The four stands, each clipped to its own quadrilateral */}
+            <clipPath id={`${id}-far`}><polygon points={farPoly} /></clipPath>
+            <clipPath id={`${id}-near`}><polygon points={nearPoly} /></clipPath>
+            <clipPath id={`${id}-left`}><polygon points={leftPoly} /></clipPath>
+            <clipPath id={`${id}-right`}><polygon points={rightPoly} /></clipPath>
+            <g clipPath={`url(#${id}-far)`}>{far}<rect x={L3} y={T3} width={R3 - L3} height={farRowH * 2} fill={`url(#${id}-shade)`} /></g>
+            <g clipPath={`url(#${id}-left)`}>{side(-1)}</g>
+            <g clipPath={`url(#${id}-right)`}>{side(1)}</g>
+            <g clipPath={`url(#${id}-near)`}>{near}</g>
 
-            {/* Far stand: back wall, seating tiers, then its leaf roof */}
-            <rect x={farLeft - 6} y={farTop - 6} width={farRight - farLeft + 12} height={farBottom - farTop + 6} fill={MG.stoneDark} />
-            {els}
-            {/* Shade under the roof on the upper rows */}
-            <rect x={farLeft} y={farTop} width={farRight - farLeft} height={farRowH * 2.5} fill={`url(#${id}-shade)`} />
-            {/* Royal box at the centre of the far stand */}
+            {/* Concourse walkways between tiers run right round the bowl, and the mitred corner seams */}
+            {[1, 2].map((k) => (
+                <rect key={`wk${k}`} x={L[k]} y={T[k]} width={R[k] - L[k]} height={B[k] - T[k]} fill="none" stroke={MG.stoneShade} strokeWidth="5" />
+            ))}
+            {[[L0, T0, L3, T3], [R0, T0, R3, T3], [L0, B0, L3, B3], [R0, B0, R3, B3]].map(([ax, ay, bx, by], i) => (
+                <line key={`seam${i}`} x1={ax} y1={ay} x2={bx} y2={by} stroke={MG.stoneDark} strokeWidth="2.5" />
+            ))}
+
+            {/* Royal box, set into the lower rows of the far stand */}
             <g>
-                <rect x={midX - 34} y={farTop + farRowH * 0.2} width="68" height={farRowH * 1.9} rx="3" fill={MG.stoneShade} stroke={MG.gold} strokeWidth="1.2" />
-                <path d={`M${midX - 38},${farTop + farRowH * 0.25} Q${midX},${farTop - farRowH * 0.9} ${midX + 38},${farTop + farRowH * 0.25} Z`} fill={MG.leaf} stroke={MG.gold} strokeWidth="1" />
-                <rect x={midX - 9} y={farTop + farRowH * 0.6} width="18" height={farRowH * 1.9} fill={club} />
-                <path d={`M${midX - 9},${farTop + farRowH * 2.5} L${midX},${farTop + farRowH * 2.1} L${midX + 9},${farTop + farRowH * 2.5} Z`} fill={MG.stoneShade} />
-                <path d={`M${midX},${farTop + farRowH * 0.9} l3,5 h-6 Z`} fill={MG.gold} />
+                <rect x={midX - 38} y={T0 - farRowH * 3.6} width="76" height={farRowH * 3.6} rx="3" fill={MG.stoneShade} stroke={MG.gold} strokeWidth="1.2" />
+                <rect x={midX - 38} y={T0 - farRowH * 1.1} width="76" height={farRowH * 0.35} fill={MG.stone} />
+                <path d={`M${midX - 42},${T0 - farRowH * 3.5} Q${midX},${T0 - farRowH * 4.6} ${midX + 42},${T0 - farRowH * 3.5} Z`} fill={MG.leaf} stroke={MG.gold} strokeWidth="1" />
+                <rect x={midX - 9} y={T0 - farRowH * 3.2} width="18" height={farRowH * 2} fill={club} />
+                <path d={`M${midX - 9},${T0 - farRowH * 1.2} L${midX},${T0 - farRowH * 1.6} L${midX + 9},${T0 - farRowH * 1.2} Z`} fill={MG.stoneShade} />
             </g>
-            {/* Leaf canopy roof with the venue name on its fascia */}
-            <path d={`M${farLeft - 22},${farTop - 2} Q${midX},${farTop - farRowH * 1.6} ${farRight + 22},${farTop - 2} L${farRight + 22},${farTop + 8} Q${midX},${farTop - farRowH * 1.1} ${farLeft - 22},${farTop + 8} Z`} fill={MG.leafDark} />
-            <path d={leafFringe(farLeft - 22, farRight + 22, farTop + 10, 7)} fill={MG.leaf} />
-            <path d={`M${farLeft - 22},${farTop - 2} Q${midX},${farTop - farRowH * 1.6} ${farRight + 22},${farTop - 2}`} stroke={MG.leafLight} strokeWidth="3" fill="none" />
-            <rect x={midX - 78} y={farTop - farRowH * 1.05 - 9} width="156" height="18" rx="9" fill={MG.leafDark} stroke={MG.gold} strokeWidth="1" />
-            <text x={midX} y={farTop - farRowH * 1.05 + 4} textAnchor="middle" fontSize="10.5" fontWeight="700" letterSpacing="2.5" fill={MG.gold}>{label.toUpperCase()}</text>
 
-            {/* Lantern towers at the corners of the far stand */}
-            <LanternPole x={farLeft - 10} base={farBottom} top={farTop - farRowH * 1.4} id={id} />
-            <LanternPole x={farRight + 10} base={farBottom} top={farTop - farRowH * 1.4} id={id} />
-
-            {/* Grass apron and the pitch-side boards */}
+            {/* Grass apron and the pitch-side boards, one unbroken ring */}
             <rect x={x0 - apron} y={y0 - apron} width={x1 - x0 + apron * 2} height={y1 - y0 + apron * 2} fill={MG.apron} />
-            {[
-                [x0 - apron - hoardH, y0 - apron - hoardH, x1 - x0 + 2 * (apron + hoardH), hoardH],
-                [x0 - apron - hoardH, y0 - apron, hoardH, y1 - y0 + 2 * apron],
-                [x1 + apron, y0 - apron, hoardH, y1 - y0 + 2 * apron],
-                [x0 - apron - hoardH, y1 + apron, x1 - x0 + 2 * (apron + hoardH), hoardH],
-            ].map(([x, y, ww, hh], i) => (
-                <g key={`hb${i}`}>
-                    <rect x={x} y={y} width={ww} height={hh} fill={MG.leafDark} />
-                    <rect x={x} y={y} width={ww} height={hh} fill={`url(#${id}-runes)`} opacity="0.9" />
+            <rect x={L0 + hoard / 2} y={T0 + hoard / 2} width={R0 - L0 - hoard} height={B0 - T0 - hoard} fill="none" stroke={MG.leafDark} strokeWidth={hoard} />
+            <rect x={L0 + hoard / 2} y={T0 + hoard / 2} width={R0 - L0 - hoard} height={B0 - T0 - hoard} fill="none" stroke={`url(#${id}-runes)`} strokeWidth={hoard} opacity="0.9" />
+
+            {/* The leaf-canopy roof: one ring from the back of the top tier to the frame */}
+            <path d={`M0,${sky} H${w} V${h} H0 Z M${L3},${T3} H${R3} V${B3} H${L3} Z`} fill={MG.leafDark} fillRule="evenodd" />
+            <path d={leafFringe(L3, R3, T3 + 1, 6)} fill={MG.leaf} />
+            <path d={leafFringe(L3, R3, B3 - 1, -6)} fill={MG.leaf} />
+            <path d={leafFringeV(T3, B3, L3 + 1, 6)} fill={MG.leaf} />
+            <path d={leafFringeV(T3, B3, R3 - 1, -6)} fill={MG.leaf} />
+            <path d={`M0,${sky} Q${midX},${sky - 10} ${w},${sky}`} stroke={MG.leafLight} strokeWidth="3" fill="none" />
+            {lanterns}
+            {corner(L3, T3, true)}
+            {corner(R3, T3, true)}
+            {corner(L3, B3, true)}
+            {corner(R3, B3, true)}
+            {/* Lantern towers rising from the far roof corners into the sky */}
+            {[L3, R3].map((x) => (
+                <g key={`tw${x}`}>
+                    <line x1={x} y1={T3} x2={x} y2={sky * 0.45} stroke={MG.stoneDark} strokeWidth="3" />
+                    <circle cx={x} cy={sky * 0.42} r="24" fill={`url(#${id}-glow)`} />
+                    <path d={`M${x - 5},${sky * 0.45} L${x + 5},${sky * 0.45} L${x + 3.5},${sky * 0.45 - 11} L${x - 3.5},${sky * 0.45 - 11} Z`} fill={MG.lantern} stroke={MG.gold} strokeWidth="1" />
                 </g>
             ))}
-
-            {/* Near stand. The camera is above and behind it, so we look down
-                over the backs of its fans: the rows step DOWN toward the pitch,
-                the row nearest the camera (bottom of the frame) is the largest,
-                we see treads and seat backs but no risers (they face away), and
-                a low parapet with lanterns closes the frame. Its sides flare out
-                to the frame edges and meet the side stands on a mitred seam,
-                the way a bowl's corners turn. */}
-            {(() => {
-                const parts: React.ReactNode[] = [];
-                const top = y1 + apron + hoardH;        // pitch-side edge
-                const parapetH = 16;
-                const bottom = h - parapetH;             // back of the stand
-                const innerL = x0 - apron - hoardH, innerR = x1 + apron + hoardH;
-                const poly = `${innerL},${top} ${innerR},${top} ${w},${bottom} ${0},${bottom}`;
-                const clipId = `${id}-nearclip`;
-                parts.push(
-                    <clipPath key="nc" id={clipId}>
-                        <polygon points={poly} />
-                    </clipPath>
-                );
-                const rows = 3;
-                const weights = [1, 1.3, 1.7];           // foreshortening: nearer rows are taller
-                const total = weights.reduce((a, b) => a + b, 0);
-                const inner: React.ReactNode[] = [];
-                let y = top;
-                for (let r = 0; r < rows; r++) {
-                    const rh = ((bottom - top) * weights[r]) / total;
-                    const sc = Math.min(2.1, rh / 15);
-                    // Tread (the step we look down on) with a shadow lip where it drops to the next row.
-                    inner.push(<rect key={`nt${r}`} x={0} y={y} width={w} height={rh} fill={r % 2 ? MG.stone : '#bfc9b8'} />);
-                    inner.push(<rect key={`nl${r}`} x={0} y={y} width={w} height={Math.max(2, rh * 0.08)} fill={MG.stoneDark} opacity="0.55" />);
-                    const step = 11 * sc;
-                    const pitch = step * 9;
-                    for (let x = step * 0.6; x < w; x += step) {
-                        const dx = ((x - midX) % pitch + pitch) % pitch;
-                        if (Math.abs(dx - pitch / 2) > pitch / 2 - step * 0.5) {
-                            // Staircase aisle: a lighter strip with step lines.
-                            inner.push(<rect key={`na${r}-${x}`} x={x - step * 0.5} y={y} width={step} height={rh} fill={MG.stoneShade} />);
-                            for (let k = 1; k < 4; k++) inner.push(<line key={`nk${r}-${x}-${k}`} x1={x - step * 0.5} x2={x + step * 0.5} y1={y + (rh * k) / 4} y2={y + (rh * k) / 4} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
-                            continue;
-                        }
-                        // Seat back (we see its plain rear), then the fan from behind rising above it.
-                        inner.push(<rect key={`ns${r}-${x}`} x={x - 4.6 * sc} y={y + rh * 0.38} width={9.2 * sc} height={rh * 0.4} rx={2 * sc} fill={r % 2 ? MG.seatDark : MG.seat} />);
-                        fanIdx++;
-                        if (jitter(fanIdx, 7) < 0.62) inner.push(<Fan key={`nf${r}-${x}`} x={x} y={y + rh * 0.5} s={sc} i={fanIdx} club={club} back />);
-                    }
-                    y += rh;
-                }
-                parts.push(<g key="nbody" clipPath={`url(#${clipId})`}>{inner}</g>);
-                // Mitred seams where the near stand meets the side stands.
-                parts.push(<line key="nsl" x1={innerL} y1={top} x2={0} y2={bottom} stroke={MG.stoneDark} strokeWidth="3" />);
-                parts.push(<line key="nsr" x1={innerR} y1={top} x2={w} y2={bottom} stroke={MG.stoneDark} strokeWidth="3" />);
-                // Parapet along the back of the stand, nearest the camera.
-                parts.push(<rect key="np" x={0} y={bottom} width={w} height={parapetH} fill={MG.stoneDark} />);
-                parts.push(<rect key="npc" x={0} y={bottom} width={w} height="4" fill={MG.stone} />);
-                parts.push(<rect key="npv" x={0} y={bottom + 4} width={w} height={parapetH - 4} fill={`url(#${id}-runes)`} opacity="0.5" />);
-                for (let i = 0; i < Math.ceil(w / 90); i++) {
-                    const lx = i * 90 + 45;
-                    // Lanterns sit on the parapet cap, so they light the back row without cutting through it.
-                    parts.push(<circle key={`npg${i}`} cx={lx} cy={bottom + 2} r="14" fill={`url(#${id}-glow)`} />);
-                    parts.push(<path key={`npl${i}`} d={`M${lx - 3.5},${bottom + 3} L${lx + 3.5},${bottom + 3} L${lx + 2.5},${bottom - 5} L${lx - 2.5},${bottom - 5} Z`} fill={MG.lantern} stroke={MG.gold} strokeWidth="0.8" />);
-                }
-                // Club pennants at the corners of the parapet.
-                for (const px of [14, w - 14]) {
-                    parts.push(<line key={`pl${px}`} x1={px} y1={h} x2={px} y2={bottom - 30} stroke={MG.stone} strokeWidth="1.5" />);
-                    parts.push(<path key={`pf${px}`} d={`M${px},${bottom - 30} l${px < w / 2 ? 16 : -16},5 l${px < w / 2 ? -16 : 16},5 Z`} fill={club} />);
-                }
-                return parts;
-            })()}
+            {/* Venue name on the far roof's fascia */}
+            <rect x={midX - 78} y={(sky + T3) / 2 - 9} width="156" height="18" rx="9" fill={MG.treeFar} stroke={MG.gold} strokeWidth="1" />
+            <text x={midX} y={(sky + T3) / 2 + 4} textAnchor="middle" fontSize="10.5" fontWeight="700" letterSpacing="2.5" fill={MG.gold}>{label.toUpperCase()}</text>
+            {/* Club pennants on the near roof corners */}
+            {[L3 / 2, (R3 + w) / 2].map((x, i) => (
+                <g key={`pn${x}`}>
+                    <line x1={x} y1={h} x2={x} y2={B3 + 6} stroke={MG.stone} strokeWidth="1.5" />
+                    <path d={`M${x},${B3 + 6} l${i ? -16 : 16},5 l${i ? 16 : -16},5 Z`} fill={club} />
+                </g>
+            ))}
         </g>
     );
 };
