@@ -83,6 +83,8 @@ Each player has unique stats that define their capabilities:
 -   **Quarterback**: The playmaker. Good passing skills.
 -   **Wizard**: Special unit capable of casting spells like *Fireball* or *Teleport*.
 
+**Armor save.** When a Fireball, a Mud slip, a Lava hazard or a Meteor would knock a player down, they roll d6 + Armor and stay on their feet on 14 or more. A Lineman (Armor 9) saves on a 5+, a Blitzer or Quarterback (Armor 8) on a 6, and a Catcher or Wizard (Armor 7) never. Armor bumps from level-ups add one more saving face each. Tackles are a pure Strength duel with no armor save.
+
 ### Terrain & Weather
 
 Pick the pitch and the sky on the start screen; both have real mechanical effects, telegraphed on the board and in the rulebook.

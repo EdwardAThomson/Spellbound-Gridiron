@@ -21,6 +21,8 @@ describe('classifyAction', () => {
     expect(classifyAction(['QB 3 fumbles the pass! (Roll: 3 vs DC: 6)'])).toBe('pass_fumble');
     expect(classifyAction(['Wizard 5 casts Fireball at 4,7!'])).toBe('spell');
     expect(classifyAction(['Catcher 4 slips in the mud!'])).toBe('knockdown');
+    expect(classifyAction(['Lost their footing in the mud!', "Catcher 4 goes down! (Armor: 9 vs 14)"])).toBe('knockdown');
+    expect(classifyAction(['Lost their footing in the mud!', "Lineman 1's armor holds! (Armor: 14 vs 14)"])).toBe('armor_save');
     expect(classifyAction(['Catcher 4 picked up the ball!'])).toBe('pickup');
     expect(classifyAction(['Catcher 4 reaches Level 2! (skill up)'])).toBe('level_up');
     expect(classifyAction(['Something entirely novel happened'])).toBe('generic');

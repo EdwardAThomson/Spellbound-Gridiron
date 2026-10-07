@@ -403,12 +403,12 @@ export const resolveTerrainStep = (
     return {
       position: to,
       knockedDown: true,
-      log: `The molten ground erupts at (${to.x}, ${to.y}) - knocked down on a lava hazard!`,
+      log: `The molten ground erupts under a lava hazard at (${to.x}, ${to.y})!`,
     };
   }
 
   if (terrain === TerrainType.MUD && rng() < MUD_SLIP_CHANCE) {
-    return { position: to, knockedDown: true, log: 'Lost their footing in the mud and slipped!' };
+    return { position: to, knockedDown: true, log: 'Lost their footing in the mud!' };
   }
 
   if (terrain === TerrainType.ICE) {
@@ -421,6 +421,51 @@ export const resolveTerrainStep = (
   }
 
   return { position: to, knockedDown: false, log: null };
+};
+
+// --- Knockdowns & the armor save ---------------------------------------------
+//
+// Every knockdown that is not a tackle (a Fireball, a Lava hazard, a Mud slip,
+// a Meteor strike) goes through `resolveKnockdown`, which gives the victim an
+// armor save: d6 + armor >= ARMOR_SAVE_TARGET keeps them on their feet. Tackles
+// stay a pure STR duel and never allow a save. Base armor 9 (Lineman) saves on
+// a 5+, 8 (Blitzer/Quarterback) on a 6, and 7 (Catcher/Wizard) never; each armor
+// bump from a level-up adds one more face.
+
+/** What knocked a player down; tackles are excluded because they allow no save. */
+export type KnockdownSource = 'fireball' | 'lava' | 'mud' | 'meteor';
+
+/** d6 + armor must reach this for a non-tackle knockdown to be shrugged off. */
+export const ARMOR_SAVE_TARGET = 14;
+
+export interface KnockdownResult {
+  /** True when the player goes down (stunned); false when the armor holds. */
+  downed: boolean;
+  /** The d6 + armor total rolled for the save. */
+  roll: number;
+  /** A player-facing line describing the save. */
+  log: string;
+}
+
+/**
+ * Resolve a non-tackle knockdown against `player`'s armor save. Consumes one
+ * rng draw (the d6). Pure: the caller applies the stun, ball loss and so on
+ * when `downed` is true.
+ */
+export const resolveKnockdown = (
+  player: Player,
+  _source: KnockdownSource,
+  rng: Rng
+): KnockdownResult => {
+  const roll = rollDie(rng, 6) + player.stats.armor;
+  const downed = roll < ARMOR_SAVE_TARGET;
+  return {
+    downed,
+    roll,
+    log: downed
+      ? `${player.name} goes down! (Armor: ${roll} vs ${ARMOR_SAVE_TARGET})`
+      : `${player.name}'s armor holds! (Armor: ${roll} vs ${ARMOR_SAVE_TARGET})`,
+  };
 };
 
 export interface MeteorResolution {

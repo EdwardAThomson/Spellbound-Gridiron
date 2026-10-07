@@ -12,6 +12,9 @@ import {
   generateLavaHazards as generateLavaHazardsPure,
   advanceMeteor as advanceMeteorPure,
   resolveLevelUps as resolveLevelUpsPure,
+  resolveKnockdown as resolveKnockdownPure,
+  KnockdownSource,
+  KnockdownResult,
   StepEffect,
   MeteorResolution,
   XpAward,
@@ -55,8 +58,9 @@ export {
   applyRoster,
   isRoster,
   ROSTER_VERSION,
+  ARMOR_SAVE_TARGET,
 } from "./rules";
-export type { StepEffect, MeteorResolution, XpAward, Roster, RosterPlayer } from "./rules";
+export type { StepEffect, MeteorResolution, XpAward, Roster, RosterPlayer, KnockdownSource, KnockdownResult } from "./rules";
 
 /** Manhattan distance (kept under its historical name for existing callers). */
 export const getDistance = manhattanDistance;
@@ -125,3 +129,7 @@ export const advanceMeteor = (
 /** Resolve a player's banked XP into level-ups (between games) with the real rng. */
 export const resolveLevelUps = (player: Player): XpAward =>
   resolveLevelUpsPure(player, defaultRng);
+
+/** Resolve a non-tackle knockdown's armor save with the real rng. */
+export const resolveKnockdown = (player: Player, source: KnockdownSource): KnockdownResult =>
+  resolveKnockdownPure(player, source, defaultRng);

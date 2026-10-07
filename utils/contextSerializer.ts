@@ -37,7 +37,7 @@ Mechanics:
   - STR (Strength): Combat/Tackling.
   - SKL (Skill): Passing/Catching.
   - MOV (Move): Squares per turn.
-  - ARM (Armor): Resistance to injury (flavor only for now).
+  - ARM (Armor): The armor save. When a Fireball, a Mud slip, a Lava hazard or a Meteor would knock a unit down, it rolls d6 + ARM and stays on its feet on 14 or more (base Lineman ARM 9 saves on 5+, Blitzer/Quarterback ARM 8 on a 6, Catcher/Wizard ARM 7 never). Tackles allow no armor save.
 - Progression: Players bank XP from their plays during the match; at the final whistle the banked XP resolves into level-ups (max level 5), league-style, each granting one small, role-capped stat bump. Levels and stats never change mid-match.
   - XP awards: successful tackle +2, completed pass +2, spell cast +1, touchdown +5.
   - Level thresholds (cumulative XP): Level 2 at 5, Level 3 at 12, Level 4 at 21, Level 5 at 32.

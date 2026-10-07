@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, resolveKnockdown, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateTeamName } from './services/gameAiService';
 import { commentaryFor } from './services/commentary';
@@ -683,14 +683,19 @@ export default function App() {
             if (step.log) addLog(step.log);
 
             if (step.knockedDown) {
-                // A slip / hazard fall ends the action prone: no pickup, no score.
-                current = { ...current, isStunned: true, movesRemaining: 0, actionTaken: true };
-                if (current.hasBall) {
-                    current = { ...current, hasBall: false };
-                    newBallPos = scatterBall(current.position);
-                    addLog('The ball comes loose in the tumble!');
+                // A slip / hazard fall allows an armor save; if it fails the
+                // action ends prone: no pickup, no score.
+                const knockdown = resolveKnockdown(current, gameState.terrain === TerrainType.LAVA ? 'lava' : 'mud');
+                addLog(knockdown.log);
+                if (knockdown.downed) {
+                    current = { ...current, isStunned: true, movesRemaining: 0, actionTaken: true };
+                    if (current.hasBall) {
+                        current = { ...current, hasBall: false };
+                        newBallPos = scatterBall(current.position);
+                        addLog('The ball comes loose in the tumble!');
+                    }
+                    break;
                 }
-                break;
             }
 
             // Check for Ball Pickup at the tile the mover actually came to rest on.
@@ -834,9 +839,13 @@ export default function App() {
         let updatedTarget = targetPlayer ? { ...targetPlayer } : null;
 
         if (spellKey === 'FIREBALL' && updatedTarget) {
-            updatedTarget.isStunned = true;
-            updatedTarget.movesRemaining = 0;
-            addLog(`${updatedTarget.name} was knocked down by the fireball!`);
+            // The target gets an armor save against the blast.
+            const knockdown = resolveKnockdown(updatedTarget, 'fireball');
+            addLog(knockdown.log);
+            if (knockdown.downed) {
+                updatedTarget.isStunned = true;
+                updatedTarget.movesRemaining = 0;
+            }
         } else if (spellKey === 'HEAL' && updatedTarget) {
             updatedTarget.isStunned = false;
             addLog(`${updatedTarget.name} is back in the fight!`);
@@ -949,6 +958,9 @@ export default function App() {
                         players: t.players.map(p => {
                             if (p.position.x !== hit.x || p.position.y !== hit.y) return p;
                             meteorLogs.push(`☄️ A meteor smashes into ${p.name} at (${hit.x}, ${hit.y})!`);
+                            const knockdown = resolveKnockdown(p, 'meteor');
+                            meteorLogs.push(knockdown.log);
+                            if (!knockdown.downed) return p;
                             const knocked = { ...p, isStunned: true, movesRemaining: 0, actionTaken: true };
                             if (knocked.hasBall) {
                                 knocked.hasBall = false;

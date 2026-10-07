@@ -28,6 +28,8 @@ import {
   ROLE_GROWTH,
   XP_AWARDS,
   MUD_SLIP_CHANCE,
+  resolveKnockdown,
+  ARMOR_SAVE_TARGET,
   WIN_SCORE,
   MAX_TURNS,
 } from './rules';
@@ -482,5 +484,46 @@ describe('scatterPosition', () => {
     expect(scatterPosition({ x: 0, y: 0 }, seq([0, 0]))).toEqual({ x: 1, y: 1 });
     // bottom-right corner pinned to (BOARD_WIDTH-2, BOARD_HEIGHT-2) = (10, 16).
     expect(scatterPosition({ x: 11, y: 17 }, seq([0.9, 0.9]))).toEqual({ x: 10, y: 16 });
+  });
+});
+
+describe('resolveKnockdown (armor save)', () => {
+  // rollDie maps r in [(k-1)/6, k/6) to face k.
+  const face = (k: number) => seq([(k - 1) / 6 + 0.01]);
+  const withArmor = (armor: number) =>
+    mkPlayer({ name: 'Tank', stats: { ...ROLE_STATS[PlayerRole.LINEMAN], armor } });
+
+  it('keeps the player up when d6 + armor reaches the target', () => {
+    const r = resolveKnockdown(withArmor(9), 'fireball', face(5));
+    expect(r.roll).toBe(14);
+    expect(r.downed).toBe(false);
+    expect(r.log).toContain('armor holds');
+  });
+
+  it('knocks the player down when d6 + armor falls short', () => {
+    const r = resolveKnockdown(withArmor(9), 'lava', face(4));
+    expect(r.roll).toBe(13);
+    expect(r.downed).toBe(true);
+    expect(r.log).toContain('goes down');
+  });
+
+  it('matches the documented thresholds for each base armor value', () => {
+    // Lineman (9) saves on 5+, Blitzer/QB (8) on a 6, Catcher/Wizard (7) never.
+    const saves = (armor: number) =>
+      [1, 2, 3, 4, 5, 6].filter((k) => !resolveKnockdown(withArmor(armor), 'mud', face(k)).downed);
+    expect(saves(ROLE_STATS[PlayerRole.LINEMAN].armor)).toEqual([5, 6]);
+    expect(saves(ROLE_STATS[PlayerRole.BLITZER].armor)).toEqual([6]);
+    expect(saves(ROLE_STATS[PlayerRole.QUARTERBACK].armor)).toEqual([6]);
+    expect(saves(ROLE_STATS[PlayerRole.CATCHER].armor)).toEqual([]);
+    expect(saves(ROLE_STATS[PlayerRole.WIZARD].armor)).toEqual([]);
+    // An armor bump from a level-up adds one more saving face.
+    expect(saves(ROLE_STATS[PlayerRole.LINEMAN].armor + 1)).toEqual([4, 5, 6]);
+    expect(ARMOR_SAVE_TARGET).toBe(14);
+  });
+
+  it('consumes exactly one rng draw', () => {
+    let draws = 0;
+    resolveKnockdown(withArmor(9), 'meteor', () => { draws++; return 0.5; });
+    expect(draws).toBe(1);
   });
 });
