@@ -142,7 +142,7 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
             const near = inner + dir * r * sideRowW;
             const far = inner + dir * (r + 1) * sideRowW;
             const top = y0 - apron - r * sideRise;
-            const bottom = y1 + apron - r * sideRise * 0.35;
+            const bottom = h;
             const xa = Math.min(near, far), xb = Math.max(near, far);
             // Tread and riser of the row (the riser faces the pitch).
             parts.push(<rect key={`st${dir}${r}`} x={xa} y={top} width={xb - xa} height={bottom - top} fill={`url(#${id}-tread${dir < 0 ? 'L' : 'R'})`} />);
@@ -247,53 +247,72 @@ const MoongladeScene: React.FC<{ b: Box; id: string; club: string; label: string
                 </g>
             ))}
 
-            {/* Near stand: we look over the backs of its fans. Rows step down
-                toward the pitch and grow toward the camera (bottom of the frame). */}
+            {/* Near stand. The camera is above and behind it, so we look down
+                over the backs of its fans: the rows step DOWN toward the pitch,
+                the row nearest the camera (bottom of the frame) is the largest,
+                we see treads and seat backs but no risers (they face away), and
+                a low parapet with lanterns closes the frame. Its sides flare out
+                to the frame edges and meet the side stands on a mitred seam,
+                the way a bowl's corners turn. */}
             {(() => {
                 const parts: React.ReactNode[] = [];
-                const top = y1 + apron + hoardH;
-                const roofH = Math.min(22, (h - top) * 0.2);
-                const bottom = h - roofH;
+                const top = y1 + apron + hoardH;        // pitch-side edge
+                const parapetH = 16;
+                const bottom = h - parapetH;             // back of the stand
+                const innerL = x0 - apron - hoardH, innerR = x1 + apron + hoardH;
+                const poly = `${innerL},${top} ${innerR},${top} ${w},${bottom} ${0},${bottom}`;
+                const clipId = `${id}-nearclip`;
+                parts.push(
+                    <clipPath key="nc" id={clipId}>
+                        <polygon points={poly} />
+                    </clipPath>
+                );
                 const rows = 3;
-                // Foreshortening: each row toward the camera is taller than the last.
-                const weights = [1, 1.25, 1.55];
+                const weights = [1, 1.3, 1.7];           // foreshortening: nearer rows are taller
                 const total = weights.reduce((a, b) => a + b, 0);
+                const inner: React.ReactNode[] = [];
                 let y = top;
-                parts.push(<rect key="nb" x={0} y={top} width={w} height={h - top} fill={MG.stoneDark} />);
                 for (let r = 0; r < rows; r++) {
                     const rh = ((bottom - top) * weights[r]) / total;
-                    const sc = Math.min(1.9, rh / 14);
-                    // Tread first, then the riser below it facing the camera.
-                    parts.push(<rect key={`nt${r}`} x={0} y={y} width={w} height={rh * 0.72} fill={MG.stone} />);
-                    parts.push(<rect key={`nr${r}`} x={0} y={y + rh * 0.72} width={w} height={rh * 0.28} fill={MG.riser} />);
-                    parts.push(<rect key={`nh${r}`} x={0} y={y} width={w} height="1.5" fill="#e8eee4" opacity="0.7" />);
+                    const sc = Math.min(2.1, rh / 15);
+                    // Tread (the step we look down on) with a shadow lip where it drops to the next row.
+                    inner.push(<rect key={`nt${r}`} x={0} y={y} width={w} height={rh} fill={r % 2 ? MG.stone : '#bfc9b8'} />);
+                    inner.push(<rect key={`nl${r}`} x={0} y={y} width={w} height={Math.max(2, rh * 0.08)} fill={MG.stoneDark} opacity="0.55" />);
                     const step = 11 * sc;
-                    for (let x = step * 0.6; x < w - step * 0.4; x += step) {
-                        const aisle = Math.abs(((x - midX) % (step * 9) + step * 9) % (step * 9) - step * 4.5) > step * 4;
-                        if (aisle) {
-                            parts.push(<rect key={`na${r}-${x}`} x={x - step * 0.5} y={y} width={step} height={rh} fill={MG.stoneShade} />);
+                    const pitch = step * 9;
+                    for (let x = step * 0.6; x < w; x += step) {
+                        const dx = ((x - midX) % pitch + pitch) % pitch;
+                        if (Math.abs(dx - pitch / 2) > pitch / 2 - step * 0.5) {
+                            // Staircase aisle: a lighter strip with step lines.
+                            inner.push(<rect key={`na${r}-${x}`} x={x - step * 0.5} y={y} width={step} height={rh} fill={MG.stoneShade} />);
+                            for (let k = 1; k < 4; k++) inner.push(<line key={`nk${r}-${x}-${k}`} x1={x - step * 0.5} x2={x + step * 0.5} y1={y + (rh * k) / 4} y2={y + (rh * k) / 4} stroke={MG.stoneDark} strokeWidth="0.8" opacity="0.6" />);
                             continue;
                         }
-                        // Seat backs face the pitch, so we see their plain backs.
-                        parts.push(<rect key={`ns${r}-${x}`} x={x - 4.4 * sc} y={y + rh * 0.3} width={8.8 * sc} height={rh * 0.42} rx={1.8 * sc} fill={r % 2 ? MG.seat : MG.seatDark} />);
+                        // Seat back (we see its plain rear), then the fan from behind rising above it.
+                        inner.push(<rect key={`ns${r}-${x}`} x={x - 4.6 * sc} y={y + rh * 0.38} width={9.2 * sc} height={rh * 0.4} rx={2 * sc} fill={r % 2 ? MG.seatDark : MG.seat} />);
                         fanIdx++;
-                        if (jitter(fanIdx, 7) < 0.6) parts.push(<Fan key={`nf${r}-${x}`} x={x} y={y + rh * 0.42} s={sc} i={fanIdx} club={club} back />);
+                        if (jitter(fanIdx, 7) < 0.62) inner.push(<Fan key={`nf${r}-${x}`} x={x} y={y + rh * 0.5} s={sc} i={fanIdx} club={club} back />);
                     }
                     y += rh;
                 }
-                // The near stand sits under its own roof, so it darkens toward the camera.
-                parts.push(<rect key="nshade" x={0} y={top} width={w} height={bottom - top} fill={`url(#${id}-nearshade)`} />);
-                // The near stand's leaf roof, right in front of the camera.
-                parts.push(<rect key="nroof" x={0} y={bottom} width={w} height={roofH} fill={MG.leafDark} />);
-                parts.push(<path key="nfr" d={leafFringe(0, w, bottom + 2, -6)} fill={MG.leaf} />);
-                for (let i = 0; i < Math.ceil(w / 70); i++) {
-                    parts.push(<circle key={`ng${i}`} cx={i * 70 + 35} cy={bottom - 2} r="12" fill={`url(#${id}-glow)`} />);
-                    parts.push(<circle key={`nl${i}`} cx={i * 70 + 35} cy={bottom - 2} r="2.4" fill={MG.lantern} />);
+                parts.push(<g key="nbody" clipPath={`url(#${clipId})`}>{inner}</g>);
+                // Mitred seams where the near stand meets the side stands.
+                parts.push(<line key="nsl" x1={innerL} y1={top} x2={0} y2={bottom} stroke={MG.stoneDark} strokeWidth="3" />);
+                parts.push(<line key="nsr" x1={innerR} y1={top} x2={w} y2={bottom} stroke={MG.stoneDark} strokeWidth="3" />);
+                // Parapet along the back of the stand, nearest the camera.
+                parts.push(<rect key="np" x={0} y={bottom} width={w} height={parapetH} fill={MG.stoneDark} />);
+                parts.push(<rect key="npc" x={0} y={bottom} width={w} height="4" fill={MG.stone} />);
+                parts.push(<rect key="npv" x={0} y={bottom + 4} width={w} height={parapetH - 4} fill={`url(#${id}-runes)`} opacity="0.5" />);
+                for (let i = 0; i < Math.ceil(w / 90); i++) {
+                    const lx = i * 90 + 45;
+                    // Lanterns sit on the parapet cap, so they light the back row without cutting through it.
+                    parts.push(<circle key={`npg${i}`} cx={lx} cy={bottom + 2} r="14" fill={`url(#${id}-glow)`} />);
+                    parts.push(<path key={`npl${i}`} d={`M${lx - 3.5},${bottom + 3} L${lx + 3.5},${bottom + 3} L${lx + 2.5},${bottom - 5} L${lx - 2.5},${bottom - 5} Z`} fill={MG.lantern} stroke={MG.gold} strokeWidth="0.8" />);
                 }
-                // Club pennants on the near roof.
-                for (const x of [w * 0.12, w * 0.88]) {
-                    parts.push(<line key={`pl${x}`} x1={x} y1={h} x2={x} y2={bottom - 18} stroke={MG.stone} strokeWidth="1.5" />);
-                    parts.push(<path key={`pf${x}`} d={`M${x},${bottom - 18} l16,5 l-16,5 Z`} fill={club} />);
+                // Club pennants at the corners of the parapet.
+                for (const px of [14, w - 14]) {
+                    parts.push(<line key={`pl${px}`} x1={px} y1={h} x2={px} y2={bottom - 30} stroke={MG.stone} strokeWidth="1.5" />);
+                    parts.push(<path key={`pf${px}`} d={`M${px},${bottom - 30} l${px < w / 2 ? 16 : -16},5 l${px < w / 2 ? -16 : 16},5 Z`} fill={club} />);
                 }
                 return parts;
             })()}
@@ -345,7 +364,7 @@ interface Scene {
 
 const SCENES: Record<string, Scene> = {
     'moonglade-bowl': {
-        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(100px, 13vw, 160px)',
+        padding: 'clamp(150px, 20vw, 230px) clamp(70px, 9vw, 112px) clamp(90px, 11vw, 136px)',
         Defs: MoongladeDefs,
         Body: MoongladeScene,
     },
