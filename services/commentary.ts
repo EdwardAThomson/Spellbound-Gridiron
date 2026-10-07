@@ -13,6 +13,7 @@ export type CommentaryKind =
   | 'pass_complete'
   | 'pass_fumble'
   | 'spell'
+  | 'armor_save'
   | 'knockdown'
   | 'pickup'
   | 'level_up'
@@ -33,7 +34,8 @@ export const classifyAction = (lines: string[]): CommentaryKind => {
   if (/perfect spiral|catches it/i.test(text)) return 'pass_complete';
   if (/fumbles the pass|Inaccurate pass/i.test(text)) return 'pass_fumble';
   if (/casts|fireball|blinks across|back in the fight/i.test(text)) return 'spell';
-  if (/slips|molten|slides|knocked down|meteor/i.test(text)) return 'knockdown';
+  if (/armor holds/i.test(text)) return 'armor_save';
+  if (/slips|footing|molten|slides|knocked down|goes down|meteor/i.test(text)) return 'knockdown';
   if (/picked up the ball/i.test(text)) return 'pickup';
   if (/Turn Ending|turn/i.test(text)) return 'turn';
   return 'generic';
@@ -75,6 +77,11 @@ const LINES: Record<CommentaryKind, string[]> = {
     'A spell soars! Health and safety would have words, if any survived!',
     'Arcane fireworks! This is why we can\'t have nice stadiums!',
     'The wizard weaves! Reality politely steps aside!',
+  ],
+  armor_save: [
+    'Clang! That armor just paid for itself!',
+    'Still standing! The smiths back home will be insufferable!',
+    'Shrugged off like a light drizzle! What a tough customer!',
   ],
   knockdown: [
     'Down they go! The pitch itself claims another victim!',
