@@ -26,6 +26,14 @@ test('the campaign hub renders, advances a fixture, and persists across a reload
   await expect(page.getByTestId('standings-row-dwarves')).toBeVisible();
   await expect(page.getByTestId('standings-row-undead')).toBeVisible();
   await expect(page.getByTestId('campaign-fixtures-played')).toHaveText('0 / 12 fixtures played');
+
+  // The next fixture shows the home club's stadium: its art, name and forecast.
+  await expect(page.getByTestId('campaign-venue')).toBeVisible();
+  await expect(page.getByTestId('campaign-venue').locator('svg[data-testid^="stadium-art-"]')).toBeVisible();
+  await expect(page.getByTestId('campaign-venue-name')).toHaveText(
+    /Moonglade Bowl|The Gutterpit|Anvilhold Forge-Ring|Barrowfrost Necropolis/
+  );
+  await expect(page.getByTestId('campaign-venue-weather')).toHaveText(/Clear|Rain|Blizzard|Meteor Shower/);
   await saveScreenshot(page, 'campaign-hub-fresh');
 
   // The opening fixture is AI-vs-AI, so the control simulates it instantly.

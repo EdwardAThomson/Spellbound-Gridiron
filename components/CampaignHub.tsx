@@ -2,6 +2,9 @@ import React from 'react';
 import {
     CampaignState, computeStandings, nextFixture, isAiFixture, isSeasonComplete, champion,
 } from '../services/campaign';
+import { fixtureVenue } from '../services/stadiums';
+import { TERRAIN_CONFIG } from '../constants';
+import StadiumArt from './StadiumArt';
 
 // The campaign hub: a league dashboard sitting on top of the pure model in
 // services/campaign.ts. It renders the standings table (3-1-0), the next
@@ -29,6 +32,10 @@ export default function CampaignHub({
     const upcoming = nextFixture(campaign.fixtures);
     const playerUpNext = upcoming ? !isAiFixture(upcoming, campaign.playerTeamId) : false;
     const winner = champion(campaign);
+    // Every fixture is played at the home club's stadium, in a forecast seeded
+    // from the fixture, so what the hub shows is exactly what kick-off uses.
+    const venue = upcoming ? fixtureVenue(campaign.season, upcoming) : null;
+    const homeClub = upcoming ? campaign.teams.find((t) => t.id === upcoming.homeId) : undefined;
 
     return (
         <div
@@ -104,6 +111,19 @@ export default function CampaignHub({
                 ) : (
                     /* Next fixture + the contextual Continue control. */
                     <div className="bg-black/40 rounded-xl border border-white/10 p-5" data-testid="campaign-next-fixture">
+                        {venue && (
+                            <div className="relative -mx-5 -mt-5 mb-4 rounded-t-xl overflow-hidden border-b border-white/10" data-testid="campaign-venue">
+                                <StadiumArt stadium={venue.stadium} clubColor={homeClub?.color} className="block w-full h-36" />
+                                <div className="absolute inset-x-0 bottom-0 px-4 py-2 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+                                    <p className="text-lg font-fantasy text-amber-100 leading-tight" data-testid="campaign-venue-name">{venue.stadium.name}</p>
+                                    <p className="text-[11px] text-stone-300 leading-snug">{venue.stadium.tagline}</p>
+                                    <p className="text-[10px] uppercase tracking-widest text-stone-400 mt-1">
+                                        {TERRAIN_CONFIG[venue.stadium.terrain].name} pitch &middot;{' '}
+                                        <span data-testid="campaign-venue-weather">{venue.weather}</span> forecast
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                         <p className="text-[10px] uppercase tracking-widest text-stone-500 mb-2 text-center">Next fixture</p>
                         <div className="flex items-center justify-center gap-4 text-lg font-bold mb-4">
                             <span className="text-blue-300">{upcoming ? teamName(upcoming.homeId) : ''}</span>
