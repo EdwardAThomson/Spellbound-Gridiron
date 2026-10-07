@@ -58,6 +58,10 @@ const mkPlayer = (over: Partial<Player> = {}): Player => ({
   mana: 0,
   xp: 0,
   level: 1,
+  skills: [],
+  spentSkills: [],
+  movedThisTurn: 0,
+  movePenalty: 0,
   ...over,
 });
 

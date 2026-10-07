@@ -41,6 +41,10 @@ const mkPlayer = (over: Partial<Player> = {}): Player => ({
   mana: 0,
   xp: 0,
   level: 1,
+  skills: [],
+  spentSkills: [],
+  movedThisTurn: 0,
+  movePenalty: 0,
   ...over,
 });
 
@@ -144,6 +148,18 @@ describe('graceful handling of missing / corrupt rosters', () => {
     const r = deserializeRosters(bad);
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/version/i);
+  });
+
+  it('migrates a v1 (pre-skills) roster, keeping its veterans', () => {
+    const roster = extractRoster(mkTeam());
+    const v1 = {
+      ...roster,
+      players: roster.players.map(({ skills, ...rest }) => ({ ...rest, xp: 14, level: 3 })),
+    };
+    const r = deserializeRosters(JSON.stringify({ version: 1, slots: { home: v1, away: v1 } }));
+    expect(r.ok).toBe(true);
+    expect(r.slots!.home.players[0].level).toBe(3);
+    expect(r.slots!.home.players.every((p) => Array.isArray(p.skills) && p.skills.length === 0)).toBe(true);
   });
 
   it('rejects a structurally broken slot', () => {

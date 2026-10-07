@@ -37,6 +37,23 @@ export interface PlayerStats {
   armor: number;
 }
 
+// Skill ids (catalog and rules in services/skills.ts). Kept here so Player can
+// carry them without types.ts importing the services layer.
+export type SkillId =
+  | 'stonewall' | 'rune_guard' | 'bodyguard'
+  | 'juggernaut' | 'charge' | 'frenzy'
+  | 'slippery' | 'sure_hands' | 'sprint'
+  | 'strong_arm' | 'storm_thrower' | 'quick_release'
+  | 'deep_well' | 'far_caster' | 'hex' | 'mana_spark'
+  | 'fleet' | 'starlit_aim' | 'leap'
+  | 'brutal' | 'mudborn' | 'strip'
+  | 'shoulder' | 'forge_born' | 'iron_hide'
+  | 'unliving' | 'grave_chill' | 'ice_skater'
+  | 'rally' | 'drilled' | 'ball_clamp';
+
+/** The playable races, as stable ids (TeamData.race keeps the display name). */
+export type RaceId = 'elves' | 'orcs' | 'dwarves' | 'undead' | 'humans';
+
 export interface Player {
   id: string;
   name: string;
@@ -54,6 +71,14 @@ export interface Player {
   // role-capped stat bump. Both persist across save/load and (later) rosters.
   xp: number;
   level: number;
+  // Skills: learned skills persist in rosters (max 2). The rest is match-only
+  // state: once-per-match skills already used, squares moved this turn (for
+  // Juggernaut), and a one-turn Move penalty (from a Hex) applied at the next
+  // turn refresh.
+  skills: SkillId[];
+  spentSkills: SkillId[];
+  movedThisTurn: number;
+  movePenalty: number;
 }
 
 export interface TeamData {

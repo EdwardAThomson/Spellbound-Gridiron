@@ -1,4 +1,4 @@
-import { GameState, TeamSide, TerrainType, Weather } from '../types';
+import { GameState, Player, TeamData, TeamSide, TerrainType, Weather } from '../types';
 
 // Versioned localStorage save/load for a single game slot.
 //
@@ -18,7 +18,10 @@ import { GameState, TeamSide, TerrainType, Weather } from '../types';
 // v3 added per-player XP and level (the progression system). Old v1/v2 saves,
 // whose players carry no XP/level, are rejected gracefully by the version guard
 // rather than loaded into a half-initialised progression state.
-export const SAVE_VERSION = 3;
+// v4 added per-player skills and their match state (spent once-per-match
+// skills, squares moved this turn, Hex penalty). A v3 save is migrated by
+// filling those in with empty defaults, so a match in progress survives.
+export const SAVE_VERSION = 4;
 
 /** The single localStorage key holding the save slot. */
 export const SAVE_KEY = 'spellbound_gridiron_save_v3';
@@ -108,6 +111,21 @@ const isGameState = (v: any): v is GameState =>
   typeof v.isGameOver === 'boolean' &&
   (v.winner === null || v.winner === TeamSide.HOME || v.winner === TeamSide.AWAY);
 
+/** Default the v4 skill fields on every player (a no-op for a v4 save). */
+const withSkillState = (gs: GameState): GameState => {
+  const fill = (team: TeamData): TeamData => ({
+    ...team,
+    players: team.players.map((p: Player) => ({
+      ...p,
+      skills: p.skills ?? [],
+      spentSkills: p.spentSkills ?? [],
+      movedThisTurn: p.movedThisTurn ?? 0,
+      movePenalty: p.movePenalty ?? 0,
+    })),
+  });
+  return { ...gs, homeTeam: fill(gs.homeTeam), awayTeam: fill(gs.awayTeam) };
+};
+
 /** Parse and validate a raw save blob, never throwing on bad input. */
 export const deserializeSave = (raw: string | null): LoadResult => {
   if (raw == null) {
@@ -124,7 +142,7 @@ export const deserializeSave = (raw: string | null): LoadResult => {
   if (!parsed || typeof parsed !== 'object') {
     return { ok: false, error: 'Saved game is corrupt and could not be read.' };
   }
-  if (parsed.version !== SAVE_VERSION) {
+  if (parsed.version !== SAVE_VERSION && parsed.version !== 3) {
     return { ok: false, error: 'Saved game is from an incompatible version.' };
   }
   if (typeof parsed.hasGameStarted !== 'boolean' || !isGameState(parsed.gameState)) {
@@ -134,7 +152,7 @@ export const deserializeSave = (raw: string | null): LoadResult => {
   return {
     ok: true,
     hasGameStarted: parsed.hasGameStarted,
-    gameState: parsed.gameState,
+    gameState: withSkillState(parsed.gameState),
   };
 };
 

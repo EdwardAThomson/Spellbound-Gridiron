@@ -3,7 +3,7 @@ import {
     GameState, TeamSide, Player, Position, TerrainType, Weather,
     BOARD_WIDTH, BOARD_HEIGHT, PlayerRole, TeamData
 } from './types';
-import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, resolveKnockdown, generateLavaHazards, advanceMeteor, isHazard, effectiveMove, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster } from './services/gameUtils';
+import { createPlayer, getPlayerAtPosition, isPositionValid, getDistance, isAdjacent, resolveTackle, resolvePass, rollDice, scatterBall, checkWinner, validateSpellCast, resolveTerrainStep, resolveKnockdown, generateLavaHazards, advanceMeteor, isHazard, kickoffPosition, findPath, reachableTiles, bankXp, resolveLevelUps, XP_AWARDS, INITIAL_MANA, extractRoster, applyRoster, Roster, turnMove, downPlayer, keepsBallWhenDowned, hasSkill, canUseSkill, spendSkill, startingMana, manaSparkCap, spellRange } from './services/gameUtils';
 import { TERRAIN_CONFIG, SPELLS } from './constants';
 import { generateTeamName } from './services/gameAiService';
 import { commentaryFor } from './services/commentary';
@@ -160,11 +160,16 @@ export default function App() {
 
         if (roster) players = applyRoster(roster, players);
 
-        // Apply the weather's Move penalty to the opening turn (Blizzard -1),
-        // off each player's (possibly roster-bumped) base Move.
+        // Opening-turn Move off each player's (possibly roster-bumped) base Move,
+        // with skills (Fleet, Charge) and the weather penalty (Blizzard -1).
+        // Skill match state starts fresh and Deep Well tops up a Wizard's mana.
         return players.map(player => ({
             ...player,
-            movesRemaining: effectiveMove(player.stats.move, weather),
+            spentSkills: [],
+            movedThisTurn: 0,
+            movePenalty: 0,
+            mana: player.role === PlayerRole.WIZARD ? startingMana(player, INITIAL_MANA) : player.mana,
+            movesRemaining: turnMove(player, weather, false),
         }));
     };
 
@@ -645,7 +650,8 @@ export default function App() {
                 if (selectedPlayer.movesRemaining <= 0) return;
                 const others = getAllPlayers().filter(p => p.id !== selectedPlayer.id);
                 const blocked = (pos: Position) => !!getPlayerAtPosition(pos, others);
-                const path = findPath(selectedPlayer.position, targetPos, selectedPlayer.movesRemaining, blocked);
+                // An unspent Leap lets the route pass over one occupied tile.
+                const path = findPath(selectedPlayer.position, targetPos, selectedPlayer.movesRemaining, blocked, canUseSkill(selectedPlayer, 'leap') ? 1 : 0);
                 if (path) {
                     walkPath(selectedPlayer, path);
                 } else {
@@ -674,11 +680,20 @@ export default function App() {
 
         for (const intended of path) {
             if (current.movesRemaining <= 0) break;
-            current = { ...current, movesRemaining: current.movesRemaining - 1 };
+            current = { ...current, movesRemaining: current.movesRemaining - 1, movedThisTurn: (current.movedThisTurn ?? 0) + 1 };
+
+            // Leap: an occupied tile on the route is passed over in the air
+            // (no terrain, no pickup); findPath only allows this with Leap.
+            const leapedOver = getPlayerAtPosition(intended, others);
+            if (leapedOver) {
+                current = spendSkill({ ...current, position: intended }, 'leap');
+                addLog(`${player.name} leaps over ${leapedOver.name}!`);
+                continue;
+            }
 
             // Terrain resolves the step: Mud may slip (knockdown), a Lava hazard
             // knocks down, Ice slides the mover one further open tile. Grass is inert.
-            const step = resolveTerrainStep(gameState.terrain, current.position, intended, gameState.hazards, occupied);
+            const step = resolveTerrainStep(gameState.terrain, current.position, intended, gameState.hazards, occupied, current);
             current = { ...current, position: step.position };
             if (step.log) addLog(step.log);
 
@@ -688,13 +703,18 @@ export default function App() {
                 const knockdown = resolveKnockdown(current, gameState.terrain === TerrainType.LAVA ? 'lava' : 'mud');
                 addLog(knockdown.log);
                 if (knockdown.downed) {
-                    current = { ...current, isStunned: true, movesRemaining: 0, actionTaken: true };
-                    if (current.hasBall) {
-                        current = { ...current, hasBall: false };
-                        newBallPos = scatterBall(current.position);
-                        addLog('The ball comes loose in the tumble!');
+                    const down = downPlayer(current);
+                    current = down.player;
+                    if (down.log) addLog(down.log);
+                    if (down.downed) {
+                        current = { ...current, actionTaken: true };
+                        if (current.hasBall && !keepsBallWhenDowned(current)) {
+                            current = { ...current, hasBall: false };
+                            newBallPos = scatterBall(current.position);
+                            addLog('The ball comes loose in the tumble!');
+                        }
+                        break;
                     }
-                    break;
                 }
             }
 
@@ -727,14 +747,28 @@ export default function App() {
         }
 
         // Reward the scorer: the XP banks now; level-ups resolve between games.
+        // Mana Spark wizards on the scoring side gain a mana point.
+        const sparked: Player[] = [];
         if (touchdown) {
             current = bankXp(current, XP_AWARDS.TOUCHDOWN);
+            if (hasSkill(current, 'mana_spark') && current.mana < manaSparkCap(current, INITIAL_MANA)) {
+                current = { ...current, mana: current.mana + 1 };
+                addLog(`${current.name} draws power from the score! (Mana Spark)`);
+            }
+            for (const ally of others) {
+                if (ally.team !== current.team || !hasSkill(ally, 'mana_spark')) continue;
+                const cap = manaSparkCap(ally, INITIAL_MANA);
+                if (ally.mana < cap) {
+                    sparked.push({ ...ally, mana: ally.mana + 1 });
+                    addLog(`${ally.name} draws power from the score! (Mana Spark)`);
+                }
+            }
         }
 
         // A touchdown can end the match (score cap reached).
         const outcome = checkWinner(scoreHome, scoreAway, gameState.turn);
 
-        updatePlayerState(current, {
+        updatePlayerState([current, ...sparked], {
             ballPosition: newBallPos,
             homeScore: scoreHome,
             awayScore: scoreAway,
@@ -759,25 +793,38 @@ export default function App() {
     };
 
     const handleTackle = (attacker: Player, defender: Player) => {
-        const result = resolveTackle(attacker, defender);
+        // Every player on the pitch is passed so tackle skills (Brutal, Rally,
+        // Stonewall, Bodyguard, Slippery...) can apply.
+        const result = resolveTackle(attacker, defender, getAllPlayers());
         addLog(result.log);
 
-        let updatedAttacker = { ...attacker, actionTaken: true, movesRemaining: 0 };
-        let updatedDefender = { ...defender };
+        let updatedAttacker: Player = { ...attacker, actionTaken: true, movesRemaining: 0 };
+        if (canUseSkill(attacker, 'frenzy')) {
+            // Frenzy: once per match the tackle doesn't end the action.
+            updatedAttacker = spendSkill({ ...attacker, movesRemaining: Math.max(0, attacker.movesRemaining - 1) }, 'frenzy');
+            addLog(`${attacker.name} is in a frenzy and keeps going!`);
+        }
+        let updatedDefender: Player = { ...result.defender };
         let newBallPos = gameState.ballPosition;
 
         if (result.success) {
-            updatedDefender.isStunned = true;
-            updatedDefender.movesRemaining = 0;
+            const down = downPlayer(updatedDefender);
+            updatedDefender = down.player;
+            if (down.log) addLog(down.log);
 
-            if (updatedDefender.hasBall) {
-                updatedDefender.hasBall = false;
+            if (down.downed && updatedDefender.hasBall && !keepsBallWhenDowned(updatedDefender)) {
+                updatedDefender = { ...updatedDefender, hasBall: false };
                 newBallPos = scatterBall(defender.position);
                 addLog("The ball pops loose!");
             }
 
             // A landed tackle banks XP for the attacker (level-ups wait for full time).
             updatedAttacker = bankXp(updatedAttacker, XP_AWARDS.TACKLE);
+        } else if (updatedDefender.hasBall && hasSkill(attacker, 'strip')) {
+            // Strip: even a failed tackle rips the ball from the carrier.
+            updatedDefender = { ...updatedDefender, hasBall: false };
+            newBallPos = scatterBall(defender.position);
+            addLog(`${attacker.name} strips the ball loose!`);
         }
 
         updatePlayerState([updatedAttacker, updatedDefender], { ballPosition: newBallPos });
@@ -785,11 +832,15 @@ export default function App() {
 
     const handlePass = (thrower: Player, targetPos: Position) => {
         // Rain / Blizzard raise the pass difficulty (weatherPassModifier).
-        const result = resolvePass(thrower, targetPos, gameState.weather);
+        const result = resolvePass(thrower, targetPos, gameState.weather, getAllPlayers());
         addLog(result.log);
 
         let newBallPos: Position | null = null;
-        let updatedThrower = { ...thrower, hasBall: false, actionTaken: true, movesRemaining: 0 };
+        // Quick Release: the pass doesn't end the thrower's action.
+        const quickRelease = hasSkill(thrower, 'quick_release');
+        let updatedThrower = quickRelease
+            ? { ...thrower, hasBall: false }
+            : { ...thrower, hasBall: false, actionTaken: true, movesRemaining: 0 };
 
         const receiver = getPlayerAtPosition(targetPos, getAllPlayers());
         let updatedReceiver = receiver ? { ...receiver } : null;
@@ -805,6 +856,10 @@ export default function App() {
 
             // A completed pass banks XP for the thrower (level-ups wait for full time).
             updatedThrower = bankXp(updatedThrower, XP_AWARDS.PASS);
+        } else if (updatedReceiver && updatedReceiver.team === thrower.team && canUseSkill(updatedReceiver, 'drilled')) {
+            // Drilled: once per match the target hauls in a bad throw anyway.
+            updatedReceiver = { ...spendSkill(updatedReceiver, 'drilled'), hasBall: true };
+            addLog(`${updatedReceiver.name} snatches the wayward ball! (Drilled)`);
         } else {
             newBallPos = scatterBall(targetPos);
             addLog(`Inaccurate pass! Ball lands at ${newBallPos.x}, ${newBallPos.y}.`);
@@ -826,7 +881,7 @@ export default function App() {
 
         // Enforce range and target validity before anything is spent.
         const targetPlayer = getPlayerAtPosition(targetPos, getAllPlayers());
-        const validation = validateSpellCast(spellKey, player, targetPos, targetPlayer, spell.range);
+        const validation = validateSpellCast(spellKey, player, targetPos, targetPlayer, spellRange(player, spellKey, spell.range));
         if (!validation.valid) {
             addLog(validation.reason);
             return;
@@ -836,15 +891,27 @@ export default function App() {
 
         // Copy both caster and target so we never mutate state in place.
         let updatedCaster: Player = { ...player, mana: player.mana - spell.cost, actionTaken: true };
-        let updatedTarget = targetPlayer ? { ...targetPlayer } : null;
+        let updatedTarget: Player | null = targetPlayer ? { ...targetPlayer } : null;
 
         if (spellKey === 'FIREBALL' && updatedTarget) {
-            // The target gets an armor save against the blast.
-            const knockdown = resolveKnockdown(updatedTarget, 'fireball');
-            addLog(knockdown.log);
-            if (knockdown.downed) {
-                updatedTarget.isStunned = true;
-                updatedTarget.movesRemaining = 0;
+            if (canUseSkill(updatedTarget, 'rune_guard')) {
+                // Rune-Guard: the first Fireball each match fizzles harmlessly.
+                updatedTarget = spendSkill(updatedTarget, 'rune_guard');
+                addLog(`Rune-Guard flares on ${updatedTarget.name} and the Fireball fizzles!`);
+            } else {
+                if (hasSkill(player, 'hex')) {
+                    // Hex: the target loses a Move point next turn, armor or not.
+                    updatedTarget = { ...updatedTarget, movePenalty: 1 };
+                    addLog(`${updatedTarget.name} is hexed and will move slower next turn!`);
+                }
+                // The target gets an armor save against the blast.
+                const knockdown = resolveKnockdown(updatedTarget, 'fireball');
+                addLog(knockdown.log);
+                if (knockdown.downed) {
+                    const down = downPlayer(updatedTarget);
+                    updatedTarget = down.player;
+                    if (down.log) addLog(down.log);
+                }
             }
         } else if (spellKey === 'HEAL' && updatedTarget) {
             updatedTarget.isStunned = false;
@@ -929,8 +996,11 @@ export default function App() {
                 ...team,
                 players: team.players.map(p => ({
                     ...p,
-                    // Blizzard shaves a Move point off every player each turn.
-                    movesRemaining: effectiveMove(p.stats.move, prev.weather),
+                    // Move for the new turn: skills (Fleet, Charge), less the
+                    // Blizzard and any Hex penalty, which is then used up.
+                    movesRemaining: turnMove(p, prev.weather, p.hasBall),
+                    movedThisTurn: 0,
+                    movePenalty: 0,
                     actionTaken: false,
                     isStunned: false
                 }))
@@ -961,8 +1031,11 @@ export default function App() {
                             const knockdown = resolveKnockdown(p, 'meteor');
                             meteorLogs.push(knockdown.log);
                             if (!knockdown.downed) return p;
-                            const knocked = { ...p, isStunned: true, movesRemaining: 0, actionTaken: true };
-                            if (knocked.hasBall) {
+                            const down = downPlayer(p);
+                            if (down.log) meteorLogs.push(down.log);
+                            if (!down.downed) return down.player;
+                            const knocked = { ...down.player, actionTaken: true };
+                            if (knocked.hasBall && !keepsBallWhenDowned(knocked)) {
                                 knocked.hasBall = false;
                                 ballPosition = scatterBall(hit);
                             }
@@ -1226,7 +1299,7 @@ export default function App() {
             const others = getAllPlayers().filter(p => p.id !== selectedForMove.id);
             const blocked = (pos: Position) => !!getPlayerAtPosition(pos, others);
             reachableKeys = new Set(
-                reachableTiles(selectedForMove.position, selectedForMove.movesRemaining, blocked).map(p => `${p.x}-${p.y}`)
+                reachableTiles(selectedForMove.position, selectedForMove.movesRemaining, blocked, canUseSkill(selectedForMove, 'leap') ? 1 : 0).map(p => `${p.x}-${p.y}`)
             );
         }
         for (let y = 0; y < BOARD_HEIGHT; y++) {

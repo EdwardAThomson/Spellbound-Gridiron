@@ -39,6 +39,12 @@ export interface RosterLoadResult {
   error?: string;
 }
 
+/** Fill in the skills list a v1 roster's players lack. */
+const withSkills = (roster: Roster): Roster => ({
+  ...roster,
+  players: roster.players.map((p) => ({ ...p, skills: p.skills ?? [] })),
+});
+
 /** Serialize the roster slots into the versioned JSON envelope. */
 export const serializeRosters = (slots: RosterSlots): string =>
   JSON.stringify({ version: ROSTER_VERSION, slots } as RosterEnvelope);
@@ -59,14 +65,16 @@ export const deserializeRosters = (raw: string | null): RosterLoadResult => {
   if (!parsed || typeof parsed !== 'object') {
     return { ok: false, error: 'Saved rosters are corrupt and could not be read.' };
   }
-  if (parsed.version !== ROSTER_VERSION) {
+  // v1 (pre-skills) rosters are migrated rather than dropped, so veterans keep
+  // their XP and levels across the update.
+  if (parsed.version !== ROSTER_VERSION && parsed.version !== 1) {
     return { ok: false, error: 'Saved rosters are from an incompatible version.' };
   }
   if (!parsed.slots || !isRoster(parsed.slots.home) || !isRoster(parsed.slots.away)) {
     return { ok: false, error: 'Saved rosters are corrupt and could not be read.' };
   }
 
-  return { ok: true, slots: { home: parsed.slots.home, away: parsed.slots.away } };
+  return { ok: true, slots: { home: withSkills(parsed.slots.home), away: withSkills(parsed.slots.away) } };
 };
 
 /** Write both team rosters to the slot. Swallows storage errors as a result. */

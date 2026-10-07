@@ -17,6 +17,7 @@ import {
   KnockdownResult,
   StepEffect,
   MeteorResolution,
+  TackleResult,
   XpAward,
   LAVA_HAZARD_COUNT,
 } from "./rules";
@@ -59,8 +60,20 @@ export {
   isRoster,
   ROSTER_VERSION,
   ARMOR_SAVE_TARGET,
+  turnMove,
 } from "./rules";
-export type { StepEffect, MeteorResolution, XpAward, Roster, RosterPlayer, KnockdownSource, KnockdownResult } from "./rules";
+export type { StepEffect, MeteorResolution, XpAward, Roster, RosterPlayer, KnockdownSource, KnockdownResult, TackleResult } from "./rules";
+export {
+  SKILLS,
+  hasSkill,
+  canUseSkill,
+  spendSkill,
+  downPlayer,
+  keepsBallWhenDowned,
+  startingMana,
+  manaSparkCap,
+  spellRange,
+} from "./skills";
 
 /** Manhattan distance (kept under its historical name for existing callers). */
 export const getDistance = manhattanDistance;
@@ -87,22 +100,30 @@ export const createPlayer = (
     mana: role === PlayerRole.WIZARD ? INITIAL_MANA : 0,
     xp: 0,
     level: 1,
+    skills: [],
+    spentSkills: [],
+    movedThisTurn: 0,
+    movePenalty: 0,
   };
 };
 
 export const rollDice = (sides: number = 6): number => rollDie(defaultRng, sides);
 
+/** Resolve a tackle with the real rng; pass everyone on the pitch to apply skills. */
 export const resolveTackle = (
   attacker: Player,
-  defender: Player
-): { success: boolean; log: string } => resolveTacklePure(attacker, defender, defaultRng);
+  defender: Player,
+  players?: Player[]
+): TackleResult => resolveTacklePure(attacker, defender, defaultRng, players);
 
+/** Resolve a pass with the real rng; pass everyone on the pitch to apply skills. */
 export const resolvePass = (
   thrower: Player,
   targetPos: Position,
-  weather: Weather = Weather.CLEAR
+  weather: Weather = Weather.CLEAR,
+  players?: Player[]
 ): { success: boolean; log: string } =>
-  resolvePassPure(thrower, targetPos, defaultRng, weatherPassModifier(weather));
+  resolvePassPure(thrower, targetPos, defaultRng, weatherPassModifier(weather), players ? { weather, players } : undefined);
 
 /** Scatter a loose ball using the real rng. */
 export const scatterBall = (pos: Position): Position => scatterPositionPure(pos, defaultRng);
@@ -113,8 +134,9 @@ export const resolveTerrainStep = (
   from: Position,
   to: Position,
   hazards: Position[],
-  isBlocked: (pos: Position) => boolean
-): StepEffect => resolveTerrainStepPure(terrain, from, to, hazards, isBlocked, defaultRng);
+  isBlocked: (pos: Position) => boolean,
+  mover?: Player
+): StepEffect => resolveTerrainStepPure(terrain, from, to, hazards, isBlocked, defaultRng, mover);
 
 /** Seed a Lava pitch's hazard tiles using the real rng. */
 export const generateLavaHazards = (count: number = LAVA_HAZARD_COUNT): Position[] =>

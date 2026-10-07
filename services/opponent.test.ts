@@ -33,6 +33,10 @@ const mkPlayer = (over: Partial<Player> = {}): Player => {
     mana: over.mana ?? (role === PlayerRole.WIZARD ? 5 : 0),
     xp: over.xp ?? 0,
     level: over.level ?? 1,
+    skills: over.skills ?? [],
+    spentSkills: over.spentSkills ?? [],
+    movedThisTurn: over.movedThisTurn ?? 0,
+    movePenalty: over.movePenalty ?? 0,
   };
 };
 
