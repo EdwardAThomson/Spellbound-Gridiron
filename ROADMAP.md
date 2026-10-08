@@ -32,6 +32,7 @@ All six resolved in Task 1 (2026-08-10).
 ## Campaign mode
 
 - [x] **League mode.** Done (2026-08-10) as Campaign on the main menu: a 4-club double round-robin season (12 fixtures, 3-1-0 table) in `services/campaign.ts`. You play your own fixtures against the computer opponent; computer-vs-computer fixtures are simulated instantly with seeded, reproducible results. The season saves to localStorage.
+- [x] **Per-club home stadia.** Done (2026-10-07): each club has a home venue (`services/stadiums.ts`, art in `components/StadiumArt.tsx`) that sets the pitch for its home fixtures and rolls the weather from a per-venue climate, seeded per fixture. The campaign hub shows the venue and forecast before kick-off.
 - [ ] **Per-club campaign rosters.** Campaign matches currently reuse the same two global roster slots as Quick Play, so each opponent fields the previous opponent's players and a Quick Play rematch overwrites the campaign squad's XP. Each club should carry its own roster inside the campaign save.
 - [ ] **Tournament mode.** Bracketed knockout play.
 - [x] **Persistent rosters.** Done (2026-08-10): finished rosters (XP, levels, stat bumps) persist to localStorage (`services/roster.ts`) and the post-game Rematch button fields the same veterans; corrupt or missing data falls back to fresh teams.

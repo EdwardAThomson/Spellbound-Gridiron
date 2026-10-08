@@ -29,6 +29,8 @@ import {
 } from './services/campaign';
 import { planOpponentTurn, OpponentAction } from './services/opponent';
 import { seededRng } from './services/rules';
+import { fixtureVenue, homeStadium, stadiumForTerrain } from './services/stadiums';
+import StadiumSurround from './components/StadiumSurround';
 
 // Icons
 const SwordIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M13 19l6-6" /><path d="M16 16l4 4" /><path d="M19 21l2-2" /></svg>;
@@ -299,10 +301,11 @@ export default function App() {
         setCampaign(updated);
     };
 
-    // Play the player's next fixture as a normal live match. Kicks off on
-    // Grass / Clear (deterministic, keys-free) with the two campaign teams, the
-    // player always HOME; carried rosters are overlaid via the existing roster
-    // system. `campaignFixture` is stashed so the result routes back to the
+    // Play the player's next fixture as a normal live match at the home club's
+    // stadium: its pitch, and the forecast `fixtureVenue` rolls from the
+    // fixture's seed (the same one the hub shows). The player is always HOME on
+    // the board even at an away ground; carried rosters are overlaid via the
+    // existing roster system. `campaignFixture` is stashed so the result routes back to the
     // season when the match ends.
     const handlePlayCampaignMatch = () => {
         if (!campaign) return;
@@ -328,6 +331,9 @@ export default function App() {
         setComputerSide(TeamSide.AWAY);
         setOpponentPlan(null);
 
+        const { stadium, weather } = fixtureVenue(campaign.season, fixture);
+        const playerAtHome = fixture.homeId === campaign.playerTeamId;
+
         setCampaignFixture(fixture);
         setHasGameStarted(true);
         setGameState({
@@ -337,14 +343,18 @@ export default function App() {
             ballPosition: { x: 6, y: 9 },
             boardWidth: BOARD_WIDTH,
             boardHeight: BOARD_HEIGHT,
-            terrain: TerrainType.GRASS,
-            weather: Weather.CLEAR,
-            hazards: [],
-            meteor: null,
-            homeTeam: { ...INITIAL_HOME_TEAM, name: playerTeam.name, race: playerTeam.race, color: 'blue', score: 0, players: setupTeam(TeamSide.HOME, Weather.CLEAR, homeRoster) },
-            awayTeam: { ...INITIAL_AWAY_TEAM, name: oppTeam.name, race: oppTeam.race, color: 'red', score: 0, players: setupTeam(TeamSide.AWAY, Weather.CLEAR, awayRoster) },
-            gameLog: [`Season ${campaign.season}: ${playerTeam.name} host ${oppTeam.name}. Kick off!`],
-            commentary: `Campaign match: ${playerTeam.name} take the field.`,
+            terrain: stadium.terrain,
+            weather,
+            hazards: seedHazards(stadium.terrain),
+            meteor: seedMeteor(weather),
+            homeTeam: { ...INITIAL_HOME_TEAM, name: playerTeam.name, race: playerTeam.race, color: 'blue', score: 0, players: setupTeam(TeamSide.HOME, weather, homeRoster) },
+            awayTeam: { ...INITIAL_AWAY_TEAM, name: oppTeam.name, race: oppTeam.race, color: 'red', score: 0, players: setupTeam(TeamSide.AWAY, weather, awayRoster) },
+            gameLog: [
+                playerAtHome
+                    ? `Season ${campaign.season}: ${playerTeam.name} host ${oppTeam.name} at ${stadium.name} (${weather}). Kick off!`
+                    : `Season ${campaign.season}: ${playerTeam.name} visit ${oppTeam.name} at ${stadium.name} (${weather}). Kick off!`,
+            ],
+            commentary: `Campaign match at ${stadium.name}: ${playerTeam.name} take the field.`,
             isGameOver: false,
             winner: null,
         });
@@ -1332,6 +1342,11 @@ export default function App() {
 
     const selectedPlayer = getSelectedPlayer();
     const terrainInfo = TERRAIN_CONFIG[gameState.terrain];
+    // The stadium drawn around the board: the home club's ground in a campaign
+    // fixture, otherwise the club venue built on the chosen pitch.
+    const matchHomeClub = campaign && campaignFixture ? campaign.teams.find(t => t.id === campaignFixture.homeId) : undefined;
+    const matchStadium = campaignFixture ? homeStadium(campaignFixture.homeId) : stadiumForTerrain(gameState.terrain);
+    const matchStadiumLabel = campaignFixture ? matchStadium.name : terrainInfo.name;
 
     return (
         <div className="min-h-screen bg-stone-900 text-gray-100 flex flex-col md:flex-row overflow-hidden">
@@ -1364,6 +1379,11 @@ export default function App() {
                             <span>TURN {gameState.turn}</span>
                             <span className="uppercase tracking-wider">{gameState.weather}</span>
                         </div>
+                        {campaign && campaignFixture && (
+                            <div className="text-center text-[10px] uppercase tracking-widest text-amber-200/70 mb-2" data-testid="match-venue">
+                                🏟️ {fixtureVenue(campaign.season, campaignFixture).stadium.name}
+                            </div>
+                        )}
                         <div className="flex justify-between items-center text-2xl font-bold font-fantasy">
                             <div className="text-blue-400 flex flex-col items-center">
                                 <span className="text-xs font-sans text-blue-400/50 mb-1">{gameState.homeTeam.race}</span>
@@ -1543,6 +1563,7 @@ export default function App() {
                 {/* CENTER: BOARD */}
                 <div className="flex-1 relative overflow-auto flex items-center justify-center bg-stone-900 p-4 md:p-8">
 
+                    <StadiumSurround stadium={matchStadium} clubColor={matchHomeClub?.color} label={matchStadiumLabel}>
                     {/* Field Background Wrapper */}
                     <div className={`relative rounded-lg shadow-2xl overflow-hidden border-4 border-stone-800 bg-gradient-to-br ${terrainInfo.color}`}>
 
@@ -1597,6 +1618,7 @@ export default function App() {
                             {renderTokenLayer()}
                         </div>
                     </div>
+                    </StadiumSurround>
                 </div>
 
                 {/* RIGHT PANEL: LOGS & CHAT */}
